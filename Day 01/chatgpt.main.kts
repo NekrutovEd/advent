@@ -1,35 +1,14 @@
+@file:Import("chatgpt.functions.main.kts")
 @file:DependsOn("com.squareup.okhttp3:okhttp:4.12.0")
-@file:DependsOn("org.json:json:20240303")
 
 import okhttp3.OkHttpClient
 import okhttp3.Request
 import okhttp3.RequestBody.Companion.toRequestBody
 import okhttp3.MediaType.Companion.toMediaType
 import org.json.JSONArray
-import org.json.JSONObject
 import java.util.concurrent.Executors
 import java.util.concurrent.TimeUnit
 import java.util.concurrent.atomic.AtomicBoolean
-
-fun isExitCommand(input: String): Boolean =
-    input.equals("exit", ignoreCase = true) || input.equals("quit", ignoreCase = true)
-
-fun addMessage(messages: JSONArray, role: String, content: String) {
-    messages.put(JSONObject().put("role", role).put("content", content))
-}
-
-fun buildRequestBody(messages: JSONArray, model: String = "gpt-4o"): String =
-    JSONObject()
-        .put("model", model)
-        .put("messages", messages)
-        .toString()
-
-fun parseResponseContent(responseBody: String): String =
-    JSONObject(responseBody)
-        .getJSONArray("choices")
-        .getJSONObject(0)
-        .getJSONObject("message")
-        .getString("content")
 
 val apiKey = System.getenv("OPENAI_API_KEY") ?: run {
     print("Enter OpenAI API key: ")

@@ -1,6 +1,6 @@
+@file:Import("chatgpt.functions.main.kts")
 @file:DependsOn("com.squareup.okhttp3:okhttp:4.12.0")
 @file:DependsOn("com.squareup.okhttp3:mockwebserver:4.12.0")
-@file:DependsOn("org.json:json:20240303")
 
 import okhttp3.OkHttpClient
 import okhttp3.Request
@@ -11,28 +11,6 @@ import okhttp3.mockwebserver.MockResponse
 import org.json.JSONArray
 import org.json.JSONObject
 import java.util.concurrent.TimeUnit
-
-// ===== Functions under test (mirrored from chatgpt.main.kts) =====
-
-fun isExitCommand(input: String): Boolean =
-    input.equals("exit", ignoreCase = true) || input.equals("quit", ignoreCase = true)
-
-fun addMessage(messages: JSONArray, role: String, content: String) {
-    messages.put(JSONObject().put("role", role).put("content", content))
-}
-
-fun buildRequestBody(messages: JSONArray, model: String = "gpt-4o"): String =
-    JSONObject()
-        .put("model", model)
-        .put("messages", messages)
-        .toString()
-
-fun parseResponseContent(responseBody: String): String =
-    JSONObject(responseBody)
-        .getJSONArray("choices")
-        .getJSONObject(0)
-        .getJSONObject("message")
-        .getString("content")
 
 // ===== Mini test framework =====
 
