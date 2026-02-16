@@ -11,6 +11,26 @@ import java.util.concurrent.Executors
 import java.util.concurrent.TimeUnit
 import java.util.concurrent.atomic.AtomicBoolean
 
+fun isExitCommand(input: String): Boolean =
+    input.equals("exit", ignoreCase = true) || input.equals("quit", ignoreCase = true)
+
+fun addMessage(messages: JSONArray, role: String, content: String) {
+    messages.put(JSONObject().put("role", role).put("content", content))
+}
+
+fun buildRequestBody(messages: JSONArray, model: String = "gpt-4o"): String =
+    JSONObject()
+        .put("model", model)
+        .put("messages", messages)
+        .toString()
+
+fun parseResponseContent(responseBody: String): String =
+    JSONObject(responseBody)
+        .getJSONArray("choices")
+        .getJSONObject(0)
+        .getJSONObject("message")
+        .getString("content")
+
 val apiKey = System.getenv("OPENAI_API_KEY") ?: run {
     print("Enter OpenAI API key: ")
     readLine()!!.trim()
@@ -29,15 +49,12 @@ println("========================================")
 while (true) {
     print("\nYou: ")
     val input = readLine() ?: break
-    if (input.equals("exit", ignoreCase = true) || input.equals("quit", ignoreCase = true)) break
+    if (isExitCommand(input)) break
     if (input.isBlank()) continue
 
-    messages.put(JSONObject().put("role", "user").put("content", input))
+    addMessage(messages, "user", input)
 
-    val body = JSONObject()
-        .put("model", "gpt-4o")
-        .put("messages", messages)
-        .toString()
+    val body = buildRequestBody(messages)
         .toRequestBody("application/json".toMediaType())
 
     val request = Request.Builder()
@@ -71,13 +88,8 @@ while (true) {
             continue
         }
 
-        val answer = JSONObject(responseBody)
-            .getJSONArray("choices")
-            .getJSONObject(0)
-            .getJSONObject("message")
-            .getString("content")
-
-        messages.put(JSONObject().put("role", "assistant").put("content", answer))
+        val answer = parseResponseContent(responseBody)
+        addMessage(messages, "assistant", answer)
         println("GPT: $answer")
     } catch (e: Exception) {
         spinning.set(false)
