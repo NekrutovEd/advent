@@ -1,6 +1,7 @@
 package state
 
 import api.ChatApi
+import androidx.compose.runtime.mutableStateListOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
@@ -12,14 +13,33 @@ import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.launch
 
 class AppState(
-    chatApi: ChatApi = ChatApi(),
-    ioDispatcher: CoroutineDispatcher = Dispatchers.IO
+    private val chatApi: ChatApi = ChatApi(),
+    private val ioDispatcher: CoroutineDispatcher = Dispatchers.IO
 ) {
     val settings = SettingsState()
-    val chat1 = ChatState(chatApi, ioDispatcher)
-    val chat2 = ChatState(chatApi, ioDispatcher)
+    val chats = mutableStateListOf<ChatState>()
 
     var showSettings by mutableStateOf(false)
+
+    init {
+        chats.add(ChatState(chatApi, ioDispatcher))
+    }
+
+    fun addChat() {
+        chats.add(ChatState(chatApi, ioDispatcher))
+    }
+
+    fun removeChat(index: Int) {
+        if (index > 0 && index < chats.size) {
+            chats.removeAt(index)
+        }
+    }
+
+    fun clearAll() {
+        chats.forEach { it.clear() }
+    }
+
+    val isBusy: Boolean get() = chats.any { it.isLoading }
 
     fun sendToAll(prompt: String, scope: CoroutineScope): List<Job> {
         if (prompt.isBlank() || settings.apiKey.isBlank()) return emptyList()
@@ -34,14 +54,18 @@ class AppState(
 
         val supervisorScope = CoroutineScope(scope.coroutineContext + SupervisorJob())
 
-        val chats = listOf(chat1, chat2)
         return chats.map { chat ->
             val chatPrompt = applyConstraints(prompt, chat.constraints)
             val combinedSystemPrompt = combineSystemPrompts(globalSystemPrompt, chat.systemPrompt)
+            val stop = chat.stopWords.filter { it.isNotBlank() }.ifEmpty { null }
+            val effectiveMaxTokens = chat.maxTokensOverrideOrNull() ?: maxTokens
+            val responseFormat = chat.responseFormatType
+            val jsonSchema = chat.jsonSchema
             supervisorScope.launch {
                 chat.sendMessage(
-                    chatPrompt, apiKey, model, temperature, maxTokens,
-                    combinedSystemPrompt, connectTimeoutSec, readTimeoutSec
+                    chatPrompt, apiKey, model, temperature, effectiveMaxTokens,
+                    combinedSystemPrompt, connectTimeoutSec, readTimeoutSec,
+                    stop, responseFormat, jsonSchema
                 )
             }
         }

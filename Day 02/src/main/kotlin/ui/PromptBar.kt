@@ -12,6 +12,7 @@ import androidx.compose.ui.unit.dp
 fun PromptBar(
     onSend: (String) -> Unit,
     enabled: Boolean,
+    onClearAll: () -> Unit,
     modifier: Modifier = Modifier
 ) {
     var text by remember { mutableStateOf("") }
@@ -50,6 +51,12 @@ fun PromptBar(
             enabled = enabled && text.isNotBlank()
         ) {
             Text("Send")
+        }
+
+        Spacer(Modifier.width(8.dp))
+
+        OutlinedButton(onClick = onClearAll) {
+            Text("Clear All")
         }
     }
 }

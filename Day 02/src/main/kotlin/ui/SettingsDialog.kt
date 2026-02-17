@@ -21,7 +21,6 @@ fun SettingsDialog(
     var maxTokens by remember { mutableStateOf(settings.maxTokens) }
     var connectTimeout by remember { mutableStateOf(settings.connectTimeout) }
     var readTimeout by remember { mutableStateOf(settings.readTimeout) }
-    var systemPrompt by remember { mutableStateOf(settings.systemPrompt) }
     var modelExpanded by remember { mutableStateOf(false) }
 
     AlertDialog(
@@ -118,15 +117,6 @@ fun SettingsDialog(
                         modifier = Modifier.weight(1f)
                     )
                 }
-
-                OutlinedTextField(
-                    value = systemPrompt,
-                    onValueChange = { systemPrompt = it },
-                    label = { Text("System Prompt (global)") },
-                    modifier = Modifier.fillMaxWidth(),
-                    minLines = 2,
-                    maxLines = 4
-                )
             }
         },
         confirmButton = {
@@ -137,7 +127,6 @@ fun SettingsDialog(
                 settings.maxTokens = maxTokens
                 settings.connectTimeout = connectTimeout
                 settings.readTimeout = readTimeout
-                settings.systemPrompt = systemPrompt
                 onDismiss()
             }) {
                 Text("Save")

@@ -30,7 +30,10 @@ class ChatApi(
             model: String = "gpt-4o",
             temperature: Double? = null,
             maxTokens: Int? = null,
-            systemPrompt: String? = null
+            systemPrompt: String? = null,
+            stop: List<String>? = null,
+            responseFormat: String? = null,
+            jsonSchema: String? = null
         ): String {
             val finalMessages = if (!systemPrompt.isNullOrBlank()) {
                 val copy = JSONArray()
@@ -51,7 +54,41 @@ class ChatApi(
             body.put("messages", finalMessages)
             if (temperature != null) body.put("temperature", temperature)
             if (maxTokens != null) body.put("max_tokens", maxTokens)
+
+            val filtered = stop?.filter { it.isNotBlank() }
+            if (!filtered.isNullOrEmpty()) {
+                body.put("stop", JSONArray(filtered))
+            }
+
+            when (responseFormat) {
+                "json_object" -> {
+                    val rf = JSONObject()
+                    rf.put("type", "json_object")
+                    body.put("response_format", rf)
+                }
+                "json_schema" -> {
+                    val rf = JSONObject()
+                    rf.put("type", "json_schema")
+                    val js = JSONObject()
+                    js.put("name", "custom_schema")
+                    js.put("strict", true)
+                    js.put("schema", JSONObject(jsonSchema ?: "{}"))
+                    rf.put("json_schema", js)
+                    body.put("response_format", rf)
+                }
+            }
+
             return body.toString()
+        }
+
+        fun parseUsage(responseBody: String): TokenUsage? {
+            val json = JSONObject(responseBody)
+            val usage = json.optJSONObject("usage") ?: return null
+            return TokenUsage(
+                promptTokens = usage.optInt("prompt_tokens", 0),
+                completionTokens = usage.optInt("completion_tokens", 0),
+                totalTokens = usage.optInt("total_tokens", 0)
+            )
         }
 
         fun parseResponseContent(responseBody: String): String {

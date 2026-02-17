@@ -24,6 +24,7 @@ class AppStateTest {
         val api = ChatApi(baseUrl = server.url("/").toString().trimEnd('/'))
         appState = AppState(api, Dispatchers.Unconfined)
         appState.settings.apiKey = "test-key"
+        appState.addChat() // now we have 2 chats for existing tests
     }
 
     @AfterEach
@@ -89,10 +90,10 @@ class AppStateTest {
         val jobs = appState.sendToAll("Hello", this)
         jobs.forEach { it.join() }
 
-        assertEquals(2, appState.chat1.messages.size)
-        assertEquals(2, appState.chat2.messages.size)
-        assertEquals("Hello", appState.chat1.messages[0].content)
-        assertEquals("Hello", appState.chat2.messages[0].content)
+        assertEquals(2, appState.chats[0].messages.size)
+        assertEquals(2, appState.chats[1].messages.size)
+        assertEquals("Hello", appState.chats[0].messages[0].content)
+        assertEquals("Hello", appState.chats[1].messages[0].content)
     }
 
     @Test
@@ -100,13 +101,13 @@ class AppStateTest {
         enqueueSuccess("Response 1")
         enqueueSuccess("Response 2")
 
-        appState.chat1.constraints = "Be verbose"
-        appState.chat2.constraints = "Be brief"
+        appState.chats[0].constraints = "Be verbose"
+        appState.chats[1].constraints = "Be brief"
         val jobs = appState.sendToAll("Tell me a story", this)
         jobs.forEach { it.join() }
 
-        assertEquals("Tell me a story\n\nBe verbose", appState.chat1.messages[0].content)
-        assertEquals("Tell me a story\n\nBe brief", appState.chat2.messages[0].content)
+        assertEquals("Tell me a story\n\nBe verbose", appState.chats[0].messages[0].content)
+        assertEquals("Tell me a story\n\nBe brief", appState.chats[1].messages[0].content)
     }
 
     @Test
@@ -114,12 +115,12 @@ class AppStateTest {
         enqueueSuccess("Response 1")
         enqueueSuccess("Response 2")
 
-        appState.chat2.constraints = "Be brief"
+        appState.chats[1].constraints = "Be brief"
         val jobs = appState.sendToAll("Tell me a story", this)
         jobs.forEach { it.join() }
 
-        assertEquals("Tell me a story", appState.chat1.messages[0].content)
-        assertEquals("Tell me a story\n\nBe brief", appState.chat2.messages[0].content)
+        assertEquals("Tell me a story", appState.chats[0].messages[0].content)
+        assertEquals("Tell me a story\n\nBe brief", appState.chats[1].messages[0].content)
     }
 
     @Test
@@ -127,7 +128,7 @@ class AppStateTest {
         enqueueSuccess("Response 1")
         enqueueSuccess("Response 2")
 
-        appState.chat1.systemPrompt = "You are a poet"
+        appState.chats[0].systemPrompt = "You are a poet"
         val jobs = appState.sendToAll("Hello", this)
         jobs.forEach { it.join() }
 
@@ -151,7 +152,7 @@ class AppStateTest {
         enqueueSuccess("Response 2")
 
         appState.settings.systemPrompt = "Be helpful"
-        appState.chat1.systemPrompt = "You are a poet"
+        appState.chats[0].systemPrompt = "You are a poet"
         val jobs = appState.sendToAll("Hello", this)
         jobs.forEach { it.join() }
 
@@ -167,8 +168,8 @@ class AppStateTest {
         val jobs = appState.sendToAll("", this)
         assertTrue(jobs.isEmpty())
 
-        assertEquals(0, appState.chat1.messages.size)
-        assertEquals(0, appState.chat2.messages.size)
+        assertEquals(0, appState.chats[0].messages.size)
+        assertEquals(0, appState.chats[1].messages.size)
     }
 
     @Test
@@ -177,8 +178,8 @@ class AppStateTest {
         val jobs = appState.sendToAll("Hello", this)
         assertTrue(jobs.isEmpty())
 
-        assertEquals(0, appState.chat1.messages.size)
-        assertEquals(0, appState.chat2.messages.size)
+        assertEquals(0, appState.chats[0].messages.size)
+        assertEquals(0, appState.chats[1].messages.size)
     }
 
     @Test
@@ -190,10 +191,156 @@ class AppStateTest {
         jobs.forEach { it.join() }
 
         // One chat succeeded, one failed
-        val successChat = if (appState.chat1.messages.size == 2) appState.chat1 else appState.chat2
-        val failChat = if (appState.chat1.messages.size == 2) appState.chat2 else appState.chat1
+        val successChat = if (appState.chats[0].messages.size == 2) appState.chats[0] else appState.chats[1]
+        val failChat = if (appState.chats[0].messages.size == 2) appState.chats[1] else appState.chats[0]
 
         assertEquals(2, successChat.messages.size)
         assertNotNull(failChat.error)
+    }
+
+    // --- New tests for dynamic chat management ---
+
+    @Test
+    fun `init creates one chat by default`() {
+        val api = ChatApi(baseUrl = "http://localhost")
+        val state = AppState(api, Dispatchers.Unconfined)
+        assertEquals(1, state.chats.size)
+    }
+
+    @Test
+    fun `addChat increases chat count`() {
+        val initialSize = appState.chats.size
+        appState.addChat()
+        assertEquals(initialSize + 1, appState.chats.size)
+    }
+
+    @Test
+    fun `removeChat removes chat at given index`() {
+        appState.addChat() // now 3 chats
+        val sizeBefore = appState.chats.size
+        appState.removeChat(1)
+        assertEquals(sizeBefore - 1, appState.chats.size)
+    }
+
+    @Test
+    fun `removeChat index 0 is ignored`() {
+        val sizeBefore = appState.chats.size
+        appState.removeChat(0)
+        assertEquals(sizeBefore, appState.chats.size)
+    }
+
+    @Test
+    fun `removeChat out of bounds is ignored`() {
+        val sizeBefore = appState.chats.size
+        appState.removeChat(100)
+        assertEquals(sizeBefore, appState.chats.size)
+    }
+
+    @Test
+    fun `clearAll clears all chats`() = runTest {
+        enqueueSuccess("R1")
+        enqueueSuccess("R2")
+
+        val jobs = appState.sendToAll("Hello", this)
+        jobs.forEach { it.join() }
+
+        assertTrue(appState.chats[0].messages.isNotEmpty())
+        assertTrue(appState.chats[1].messages.isNotEmpty())
+
+        appState.clearAll()
+
+        assertEquals(0, appState.chats[0].messages.size)
+        assertEquals(0, appState.chats[1].messages.size)
+    }
+
+    @Test
+    fun `isBusy returns false when no chats are loading`() {
+        assertFalse(appState.isBusy)
+    }
+
+    // --- New per-chat option tests ---
+
+    @Test
+    fun `sendToAll uses per-chat maxTokens override`() = runTest {
+        enqueueSuccess("R1")
+        enqueueSuccess("R2")
+
+        appState.settings.maxTokens = "500"
+        appState.chats[0].maxTokensOverride = "100"
+        val jobs = appState.sendToAll("Hello", this)
+        jobs.forEach { it.join() }
+
+        val req1 = server.takeRequest()
+        val body1 = JSONObject(req1.body.readUtf8())
+        assertEquals(100, body1.getInt("max_tokens"))
+
+        val req2 = server.takeRequest()
+        val body2 = JSONObject(req2.body.readUtf8())
+        assertEquals(500, body2.getInt("max_tokens"))
+    }
+
+    @Test
+    fun `sendToAll falls back to global maxTokens when override is blank`() = runTest {
+        enqueueSuccess("R1")
+        enqueueSuccess("R2")
+
+        appState.settings.maxTokens = "300"
+        appState.chats[0].maxTokensOverride = ""
+        appState.chats[1].maxTokensOverride = ""
+        val jobs = appState.sendToAll("Hello", this)
+        jobs.forEach { it.join() }
+
+        val req1 = server.takeRequest()
+        val body1 = JSONObject(req1.body.readUtf8())
+        assertEquals(300, body1.getInt("max_tokens"))
+
+        val req2 = server.takeRequest()
+        val body2 = JSONObject(req2.body.readUtf8())
+        assertEquals(300, body2.getInt("max_tokens"))
+    }
+
+    @Test
+    fun `sendToAll passes stop words`() = runTest {
+        enqueueSuccess("R1")
+        enqueueSuccess("R2")
+
+        appState.chats[0].stopWords[0] = "END"
+        appState.chats[0].addStopWord()
+        appState.chats[0].stopWords[1] = "STOP"
+        val jobs = appState.sendToAll("Hello", this)
+        jobs.forEach { it.join() }
+
+        val req1 = server.takeRequest()
+        val body1 = JSONObject(req1.body.readUtf8())
+        assertTrue(body1.has("stop"))
+        val stopArr = body1.getJSONArray("stop")
+        assertEquals(2, stopArr.length())
+        assertEquals("END", stopArr.getString(0))
+        assertEquals("STOP", stopArr.getString(1))
+
+        // Second chat has no stop words (only blank default)
+        val req2 = server.takeRequest()
+        val body2 = JSONObject(req2.body.readUtf8())
+        assertFalse(body2.has("stop"))
+    }
+
+    @Test
+    fun `sendToAll passes response format`() = runTest {
+        enqueueSuccess("R1")
+        enqueueSuccess("R2")
+
+        appState.chats[0].responseFormatType = "json_object"
+        val jobs = appState.sendToAll("Hello", this)
+        jobs.forEach { it.join() }
+
+        val req1 = server.takeRequest()
+        val body1 = JSONObject(req1.body.readUtf8())
+        assertTrue(body1.has("response_format"))
+        assertEquals("json_object", body1.getJSONObject("response_format").getString("type"))
+
+        // Second chat uses default "text" → no response_format
+        val req2 = server.takeRequest()
+        val body2 = JSONObject(req2.body.readUtf8())
+        assertFalse(body2.has("response_format"))
     }
 }

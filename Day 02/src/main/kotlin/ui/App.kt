@@ -4,6 +4,7 @@ import androidx.compose.foundation.layout.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import state.AppState
@@ -12,7 +13,7 @@ import state.ChatState
 @Composable
 fun App(appState: AppState) {
     val scope = rememberCoroutineScope()
-    val isBusy = appState.chat1.isLoading || appState.chat2.isLoading
+    val isBusy = appState.isBusy
 
     MaterialTheme(colorScheme = darkColorScheme()) {
         Surface(color = MaterialTheme.colorScheme.background) {
@@ -27,27 +28,43 @@ fun App(appState: AppState) {
                     }
                 }
 
-                // Prompt bar
-                PromptBar(
-                    onSend = { prompt -> appState.sendToAll(prompt, scope) },
-                    enabled = !isBusy && appState.settings.apiKey.isNotBlank()
+                // Global system prompt
+                ConstraintsField(
+                    value = appState.settings.systemPrompt,
+                    onValueChange = { appState.settings.systemPrompt = it },
+                    placeholder = "System prompt (global)..."
                 )
 
-                // Two-panel chat area
+                // Global user prompt
+                PromptBar(
+                    onSend = { prompt -> appState.sendToAll(prompt, scope) },
+                    enabled = !isBusy && appState.settings.apiKey.isNotBlank(),
+                    onClearAll = { appState.clearAll() }
+                )
+
+                // Dynamic chat area
                 Row(modifier = Modifier.weight(1f).fillMaxWidth()) {
-                    ChatColumn(
-                        title = "Chat 1",
-                        chatState = appState.chat1,
-                        modifier = Modifier.weight(1f).fillMaxHeight()
-                    )
+                    appState.chats.forEachIndexed { index, chatState ->
+                        if (index > 0) {
+                            VerticalDivider()
+                        }
 
+                        ChatColumn(
+                            title = "Chat ${index + 1}",
+                            chatState = chatState,
+                            onDrop = if (index > 0) {{ appState.removeChat(index) }} else null,
+                            modifier = Modifier.weight(1f).fillMaxHeight()
+                        )
+                    }
+
+                    // Add chat button
                     VerticalDivider()
-
-                    ChatColumn(
-                        title = "Chat 2",
-                        chatState = appState.chat2,
-                        modifier = Modifier.weight(1f).fillMaxHeight()
-                    )
+                    TextButton(
+                        onClick = { appState.addChat() },
+                        modifier = Modifier.fillMaxHeight().width(48.dp)
+                    ) {
+                        Text("+", style = MaterialTheme.typography.headlineMedium)
+                    }
                 }
             }
         }
@@ -65,23 +82,13 @@ fun App(appState: AppState) {
 private fun ChatColumn(
     title: String,
     chatState: ChatState,
+    onDrop: (() -> Unit)? = null,
     modifier: Modifier = Modifier
 ) {
-    Column(modifier = modifier) {
-        ConstraintsField(
-            value = chatState.constraints,
-            onValueChange = { chatState.constraints = it },
-            placeholder = "Constraints (appended to prompt)..."
-        )
-        ConstraintsField(
-            value = chatState.systemPrompt,
-            onValueChange = { chatState.systemPrompt = it },
-            placeholder = "System prompt (per-chat)..."
-        )
-        ChatPanel(
-            title = title,
-            chatState = chatState,
-            modifier = Modifier.weight(1f).fillMaxWidth()
-        )
-    }
+    ChatPanel(
+        title = title,
+        chatState = chatState,
+        modifier = modifier,
+        onDrop = onDrop
+    )
 }
