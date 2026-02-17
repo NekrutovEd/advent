@@ -60,6 +60,28 @@ class AppStateTest {
     }
 
     @Test
+    fun `combineSystemPrompts both empty returns null`() {
+        assertNull(AppState.combineSystemPrompts("", ""))
+        assertNull(AppState.combineSystemPrompts("  ", "  "))
+    }
+
+    @Test
+    fun `combineSystemPrompts only global returns global`() {
+        assertEquals("Be helpful", AppState.combineSystemPrompts("Be helpful", ""))
+    }
+
+    @Test
+    fun `combineSystemPrompts only perChat returns perChat`() {
+        assertEquals("Be brief", AppState.combineSystemPrompts("", "Be brief"))
+    }
+
+    @Test
+    fun `combineSystemPrompts both present combines with double newline`() {
+        val result = AppState.combineSystemPrompts("Be helpful", "Be brief")
+        assertEquals("Be helpful\n\nBe brief", result)
+    }
+
+    @Test
     fun `sendToAll sends to both chats without constraints`() = runTest {
         enqueueSuccess("Response 1")
         enqueueSuccess("Response 2")
@@ -74,16 +96,70 @@ class AppStateTest {
     }
 
     @Test
-    fun `sendToAll applies constraints to chat2 only`() = runTest {
+    fun `sendToAll applies per-chat constraints independently`() = runTest {
         enqueueSuccess("Response 1")
         enqueueSuccess("Response 2")
 
-        appState.constraints = "Be brief"
+        appState.chat1.constraints = "Be verbose"
+        appState.chat2.constraints = "Be brief"
+        val jobs = appState.sendToAll("Tell me a story", this)
+        jobs.forEach { it.join() }
+
+        assertEquals("Tell me a story\n\nBe verbose", appState.chat1.messages[0].content)
+        assertEquals("Tell me a story\n\nBe brief", appState.chat2.messages[0].content)
+    }
+
+    @Test
+    fun `sendToAll with constraints on one chat only`() = runTest {
+        enqueueSuccess("Response 1")
+        enqueueSuccess("Response 2")
+
+        appState.chat2.constraints = "Be brief"
         val jobs = appState.sendToAll("Tell me a story", this)
         jobs.forEach { it.join() }
 
         assertEquals("Tell me a story", appState.chat1.messages[0].content)
         assertEquals("Tell me a story\n\nBe brief", appState.chat2.messages[0].content)
+    }
+
+    @Test
+    fun `sendToAll routes per-chat system prompt`() = runTest {
+        enqueueSuccess("Response 1")
+        enqueueSuccess("Response 2")
+
+        appState.chat1.systemPrompt = "You are a poet"
+        val jobs = appState.sendToAll("Hello", this)
+        jobs.forEach { it.join() }
+
+        // Verify chat1 got system prompt
+        val req1 = server.takeRequest()
+        val body1 = JSONObject(req1.body.readUtf8())
+        val msgs1 = body1.getJSONArray("messages")
+        assertEquals("system", msgs1.getJSONObject(0).getString("role"))
+        assertEquals("You are a poet", msgs1.getJSONObject(0).getString("content"))
+
+        // Verify chat2 has no system prompt
+        val req2 = server.takeRequest()
+        val body2 = JSONObject(req2.body.readUtf8())
+        val msgs2 = body2.getJSONArray("messages")
+        assertEquals("user", msgs2.getJSONObject(0).getString("role"))
+    }
+
+    @Test
+    fun `sendToAll combines global and per-chat system prompt`() = runTest {
+        enqueueSuccess("Response 1")
+        enqueueSuccess("Response 2")
+
+        appState.settings.systemPrompt = "Be helpful"
+        appState.chat1.systemPrompt = "You are a poet"
+        val jobs = appState.sendToAll("Hello", this)
+        jobs.forEach { it.join() }
+
+        val req1 = server.takeRequest()
+        val body1 = JSONObject(req1.body.readUtf8())
+        val msgs1 = body1.getJSONArray("messages")
+        assertEquals("system", msgs1.getJSONObject(0).getString("role"))
+        assertEquals("Be helpful\n\nYou are a poet", msgs1.getJSONObject(0).getString("content"))
     }
 
     @Test

@@ -7,6 +7,7 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import state.AppState
+import state.ChatState
 
 @Composable
 fun App(appState: AppState) {
@@ -34,27 +35,19 @@ fun App(appState: AppState) {
 
                 // Two-panel chat area
                 Row(modifier = Modifier.weight(1f).fillMaxWidth()) {
-                    // Chat 1 — no constraints
-                    ChatPanel(
-                        title = "Chat 1 (no constraints)",
+                    ChatColumn(
+                        title = "Chat 1",
                         chatState = appState.chat1,
                         modifier = Modifier.weight(1f).fillMaxHeight()
                     )
 
                     VerticalDivider()
 
-                    // Chat 2 — with constraints
-                    Column(modifier = Modifier.weight(1f).fillMaxHeight()) {
-                        ConstraintsField(
-                            value = appState.constraints,
-                            onValueChange = { appState.constraints = it }
-                        )
-                        ChatPanel(
-                            title = "Chat 2 (with constraints)",
-                            chatState = appState.chat2,
-                            modifier = Modifier.weight(1f).fillMaxWidth()
-                        )
-                    }
+                    ChatColumn(
+                        title = "Chat 2",
+                        chatState = appState.chat2,
+                        modifier = Modifier.weight(1f).fillMaxHeight()
+                    )
                 }
             }
         }
@@ -65,5 +58,30 @@ fun App(appState: AppState) {
                 onDismiss = { appState.showSettings = false }
             )
         }
+    }
+}
+
+@Composable
+private fun ChatColumn(
+    title: String,
+    chatState: ChatState,
+    modifier: Modifier = Modifier
+) {
+    Column(modifier = modifier) {
+        ConstraintsField(
+            value = chatState.constraints,
+            onValueChange = { chatState.constraints = it },
+            placeholder = "Constraints (appended to prompt)..."
+        )
+        ConstraintsField(
+            value = chatState.systemPrompt,
+            onValueChange = { chatState.systemPrompt = it },
+            placeholder = "System prompt (per-chat)..."
+        )
+        ChatPanel(
+            title = title,
+            chatState = chatState,
+            modifier = Modifier.weight(1f).fillMaxWidth()
+        )
     }
 }

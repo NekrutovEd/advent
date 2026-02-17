@@ -18,6 +18,8 @@ class ChatState(
     val messages = mutableStateListOf<ChatMessage>()
     var isLoading by mutableStateOf(false)
     var error by mutableStateOf<String?>(null)
+    var constraints by mutableStateOf("")
+    var systemPrompt by mutableStateOf("")
 
     private val history = JSONArray()
 
@@ -26,7 +28,10 @@ class ChatState(
         apiKey: String,
         model: String,
         temperature: Double?,
-        maxTokens: Int?
+        maxTokens: Int?,
+        systemPrompt: String? = null,
+        connectTimeoutSec: Int? = null,
+        readTimeoutSec: Int? = null
     ) {
         isLoading = true
         error = null
@@ -35,9 +40,9 @@ class ChatState(
         ChatApi.addMessage(history, "user", userContent)
 
         try {
-            val requestBody = ChatApi.buildRequestBody(history, model, temperature, maxTokens)
+            val requestBody = ChatApi.buildRequestBody(history, model, temperature, maxTokens, systemPrompt)
             val responseBody = withContext(ioDispatcher) {
-                chatApi.sendMessage(apiKey, requestBody)
+                chatApi.sendMessage(apiKey, requestBody, connectTimeoutSec, readTimeoutSec)
             }
             val content = ChatApi.parseResponseContent(responseBody)
             ChatApi.addMessage(history, "assistant", content)

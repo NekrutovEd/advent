@@ -19,7 +19,6 @@ class AppState(
     val chat1 = ChatState(chatApi, ioDispatcher)
     val chat2 = ChatState(chatApi, ioDispatcher)
 
-    var constraints by mutableStateOf("")
     var showSettings by mutableStateOf(false)
 
     fun sendToAll(prompt: String, scope: CoroutineScope): List<Job> {
@@ -29,24 +28,39 @@ class AppState(
         val maxTokens = settings.maxTokensOrNull()
         val model = settings.model
         val apiKey = settings.apiKey
+        val connectTimeoutSec = settings.connectTimeoutSec()
+        val readTimeoutSec = settings.readTimeoutSec()
+        val globalSystemPrompt = settings.systemPrompt
 
         val supervisorScope = CoroutineScope(scope.coroutineContext + SupervisorJob())
 
-        val job1 = supervisorScope.launch {
-            chat1.sendMessage(prompt, apiKey, model, temperature, maxTokens)
+        val chats = listOf(chat1, chat2)
+        return chats.map { chat ->
+            val chatPrompt = applyConstraints(prompt, chat.constraints)
+            val combinedSystemPrompt = combineSystemPrompts(globalSystemPrompt, chat.systemPrompt)
+            supervisorScope.launch {
+                chat.sendMessage(
+                    chatPrompt, apiKey, model, temperature, maxTokens,
+                    combinedSystemPrompt, connectTimeoutSec, readTimeoutSec
+                )
+            }
         }
-
-        val chat2Prompt = applyConstraints(prompt, constraints)
-        val job2 = supervisorScope.launch {
-            chat2.sendMessage(chat2Prompt, apiKey, model, temperature, maxTokens)
-        }
-
-        return listOf(job1, job2)
     }
 
     companion object {
         fun applyConstraints(prompt: String, constraints: String): String {
             return if (constraints.isBlank()) prompt else "$prompt\n\n$constraints"
+        }
+
+        fun combineSystemPrompts(global: String, perChat: String): String? {
+            val g = global.trim()
+            val p = perChat.trim()
+            return when {
+                g.isEmpty() && p.isEmpty() -> null
+                g.isEmpty() -> p
+                p.isEmpty() -> g
+                else -> "$g\n\n$p"
+            }
         }
     }
 }

@@ -29,11 +29,26 @@ class ChatApi(
             messages: JSONArray,
             model: String = "gpt-4o",
             temperature: Double? = null,
-            maxTokens: Int? = null
+            maxTokens: Int? = null,
+            systemPrompt: String? = null
         ): String {
+            val finalMessages = if (!systemPrompt.isNullOrBlank()) {
+                val copy = JSONArray()
+                val systemMsg = JSONObject()
+                systemMsg.put("role", "system")
+                systemMsg.put("content", systemPrompt)
+                copy.put(systemMsg)
+                for (i in 0 until messages.length()) {
+                    copy.put(messages.getJSONObject(i))
+                }
+                copy
+            } else {
+                messages
+            }
+
             val body = JSONObject()
             body.put("model", model)
-            body.put("messages", messages)
+            body.put("messages", finalMessages)
             if (temperature != null) body.put("temperature", temperature)
             if (maxTokens != null) body.put("max_tokens", maxTokens)
             return body.toString()
@@ -48,7 +63,21 @@ class ChatApi(
         }
     }
 
-    fun sendMessage(apiKey: String, requestBody: String): String {
+    fun sendMessage(
+        apiKey: String,
+        requestBody: String,
+        connectTimeoutSec: Int? = null,
+        readTimeoutSec: Int? = null
+    ): String {
+        val effectiveClient = if (connectTimeoutSec != null || readTimeoutSec != null) {
+            client.newBuilder().apply {
+                if (connectTimeoutSec != null) connectTimeout(connectTimeoutSec.toLong(), TimeUnit.SECONDS)
+                if (readTimeoutSec != null) readTimeout(readTimeoutSec.toLong(), TimeUnit.SECONDS)
+            }.build()
+        } else {
+            client
+        }
+
         val request = Request.Builder()
             .url("$baseUrl/v1/chat/completions")
             .addHeader("Authorization", "Bearer $apiKey")
@@ -56,7 +85,7 @@ class ChatApi(
             .post(requestBody.toRequestBody(JSON_MEDIA_TYPE))
             .build()
 
-        val response = client.newCall(request).execute()
+        val response = effectiveClient.newCall(request).execute()
         val body = response.body?.string() ?: throw RuntimeException("Empty response body")
 
         if (!response.isSuccessful) {

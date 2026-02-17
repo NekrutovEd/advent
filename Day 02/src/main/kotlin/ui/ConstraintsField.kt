@@ -12,13 +12,14 @@ import androidx.compose.ui.unit.dp
 fun ConstraintsField(
     value: String,
     onValueChange: (String) -> Unit,
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
+    placeholder: String = "Constraints (appended to prompt)..."
 ) {
     OutlinedTextField(
         value = value,
         onValueChange = onValueChange,
         modifier = modifier.fillMaxWidth().padding(horizontal = 8.dp),
-        placeholder = { Text("Constraints for Chat 2 (appended to prompt)...") },
+        placeholder = { Text(placeholder) },
         singleLine = true
     )
 }

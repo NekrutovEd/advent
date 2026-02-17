@@ -19,6 +19,9 @@ fun SettingsDialog(
     var model by remember { mutableStateOf(settings.model) }
     var temperature by remember { mutableStateOf(settings.temperature) }
     var maxTokens by remember { mutableStateOf(settings.maxTokens) }
+    var connectTimeout by remember { mutableStateOf(settings.connectTimeout) }
+    var readTimeout by remember { mutableStateOf(settings.readTimeout) }
+    var systemPrompt by remember { mutableStateOf(settings.systemPrompt) }
     var modelExpanded by remember { mutableStateOf(false) }
 
     AlertDialog(
@@ -90,6 +93,40 @@ fun SettingsDialog(
                     singleLine = true,
                     modifier = Modifier.fillMaxWidth()
                 )
+
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    OutlinedTextField(
+                        value = connectTimeout,
+                        onValueChange = { newValue ->
+                            if (newValue.isEmpty() || newValue.all { it.isDigit() }) {
+                                connectTimeout = newValue
+                            }
+                        },
+                        label = { Text("Connect Timeout (sec)") },
+                        singleLine = true,
+                        modifier = Modifier.weight(1f)
+                    )
+                    OutlinedTextField(
+                        value = readTimeout,
+                        onValueChange = { newValue ->
+                            if (newValue.isEmpty() || newValue.all { it.isDigit() }) {
+                                readTimeout = newValue
+                            }
+                        },
+                        label = { Text("Read Timeout (sec)") },
+                        singleLine = true,
+                        modifier = Modifier.weight(1f)
+                    )
+                }
+
+                OutlinedTextField(
+                    value = systemPrompt,
+                    onValueChange = { systemPrompt = it },
+                    label = { Text("System Prompt (global)") },
+                    modifier = Modifier.fillMaxWidth(),
+                    minLines = 2,
+                    maxLines = 4
+                )
             }
         },
         confirmButton = {
@@ -98,6 +135,9 @@ fun SettingsDialog(
                 settings.model = model
                 settings.temperature = temperature
                 settings.maxTokens = maxTokens
+                settings.connectTimeout = connectTimeout
+                settings.readTimeout = readTimeout
+                settings.systemPrompt = systemPrompt
                 onDismiss()
             }) {
                 Text("Save")

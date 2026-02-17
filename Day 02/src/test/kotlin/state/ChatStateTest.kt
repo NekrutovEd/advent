@@ -106,4 +106,28 @@ class ChatStateTest {
         chatState.clear()
         assertNull(chatState.error)
     }
+
+    @Test
+    fun `sendMessage with system prompt includes it in request`() = runTest {
+        enqueueSuccess("Response")
+        chatState.sendMessage("Hello", "key", "gpt-4o", null, null, systemPrompt = "Be helpful")
+
+        val recorded = server.takeRequest()
+        val sentBody = JSONObject(recorded.body.readUtf8())
+        val msgs = sentBody.getJSONArray("messages")
+        assertEquals("system", msgs.getJSONObject(0).getString("role"))
+        assertEquals("Be helpful", msgs.getJSONObject(0).getString("content"))
+        assertEquals("user", msgs.getJSONObject(1).getString("role"))
+    }
+
+    @Test
+    fun `sendMessage with timeouts succeeds`() = runTest {
+        enqueueSuccess("Response")
+        chatState.sendMessage(
+            "Hello", "key", "gpt-4o", null, null,
+            connectTimeoutSec = 5, readTimeoutSec = 10
+        )
+
+        assertEquals(2, chatState.messages.size)
+    }
 }

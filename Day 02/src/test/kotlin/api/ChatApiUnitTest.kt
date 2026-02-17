@@ -83,6 +83,51 @@ class ChatApiUnitTest {
     }
 
     @Test
+    fun `buildRequestBody with systemPrompt inserts system message first`() {
+        val messages = JSONArray()
+        ChatApi.addMessage(messages, "user", "Hi")
+        val body = ChatApi.buildRequestBody(messages, systemPrompt = "You are helpful")
+        val json = JSONObject(body)
+        val msgs = json.getJSONArray("messages")
+        assertEquals(2, msgs.length())
+        assertEquals("system", msgs.getJSONObject(0).getString("role"))
+        assertEquals("You are helpful", msgs.getJSONObject(0).getString("content"))
+        assertEquals("user", msgs.getJSONObject(1).getString("role"))
+    }
+
+    @Test
+    fun `buildRequestBody without systemPrompt has no system message`() {
+        val messages = JSONArray()
+        ChatApi.addMessage(messages, "user", "Hi")
+        val body = ChatApi.buildRequestBody(messages)
+        val json = JSONObject(body)
+        val msgs = json.getJSONArray("messages")
+        assertEquals(1, msgs.length())
+        assertEquals("user", msgs.getJSONObject(0).getString("role"))
+    }
+
+    @Test
+    fun `buildRequestBody with blank systemPrompt has no system message`() {
+        val messages = JSONArray()
+        ChatApi.addMessage(messages, "user", "Hi")
+        val body = ChatApi.buildRequestBody(messages, systemPrompt = "   ")
+        val json = JSONObject(body)
+        val msgs = json.getJSONArray("messages")
+        assertEquals(1, msgs.length())
+        assertEquals("user", msgs.getJSONObject(0).getString("role"))
+    }
+
+    @Test
+    fun `buildRequestBody with systemPrompt does not mutate original messages`() {
+        val messages = JSONArray()
+        ChatApi.addMessage(messages, "user", "Hi")
+        val originalLength = messages.length()
+        ChatApi.buildRequestBody(messages, systemPrompt = "You are helpful")
+        assertEquals(originalLength, messages.length())
+        assertEquals("user", messages.getJSONObject(0).getString("role"))
+    }
+
+    @Test
     fun `parseResponseContent extracts content`() {
         val response = """
             {

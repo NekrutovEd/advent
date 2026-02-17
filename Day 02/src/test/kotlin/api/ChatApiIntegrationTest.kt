@@ -125,6 +125,19 @@ class ChatApiIntegrationTest {
     }
 
     @Test
+    fun `request with custom timeouts succeeds`() {
+        server.enqueue(mockSuccessResponse("Timeout test"))
+
+        val messages = JSONArray()
+        ChatApi.addMessage(messages, "user", "Hi")
+        val requestBody = ChatApi.buildRequestBody(messages)
+        val responseBody = chatApi.sendMessage("test-key", requestBody, connectTimeoutSec = 5, readTimeoutSec = 10)
+        val content = ChatApi.parseResponseContent(responseBody)
+
+        assertEquals("Timeout test", content)
+    }
+
+    @Test
     fun `multi-turn context is sent correctly`() {
         server.enqueue(mockSuccessResponse("Response 2"))
 
