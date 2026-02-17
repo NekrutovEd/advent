@@ -3,8 +3,10 @@ package state
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
+import i18n.Lang
 
 class SettingsState {
+    var lang by mutableStateOf(Lang.EN)
     var apiKey by mutableStateOf(System.getenv("OPENAI_API_KEY") ?: "")
     var model by mutableStateOf("gpt-4o")
     var temperature by mutableStateOf(1.0f)

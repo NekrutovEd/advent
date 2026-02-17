@@ -7,6 +7,8 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.unit.dp
+import i18n.Lang
+import i18n.LocalStrings
 import state.SettingsState
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -15,6 +17,7 @@ fun SettingsDialog(
     settings: SettingsState,
     onDismiss: () -> Unit
 ) {
+    val s = LocalStrings.current
     var apiKey by remember { mutableStateOf(settings.apiKey) }
     var model by remember { mutableStateOf(settings.model) }
     var temperature by remember { mutableStateOf(settings.temperature) }
@@ -25,16 +28,33 @@ fun SettingsDialog(
 
     AlertDialog(
         onDismissRequest = onDismiss,
-        title = { Text("Settings") },
+        title = { Text(s.settingsTitle) },
         text = {
             Column(
                 verticalArrangement = Arrangement.spacedBy(12.dp),
                 modifier = Modifier.width(350.dp)
             ) {
+                // Language selector — applied immediately
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(12.dp)
+                ) {
+                    Text(s.language, style = MaterialTheme.typography.bodyMedium)
+                    Lang.entries.forEach { lang ->
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            RadioButton(
+                                selected = settings.lang == lang,
+                                onClick = { settings.lang = lang }
+                            )
+                            Text(lang.displayName)
+                        }
+                    }
+                }
+
                 OutlinedTextField(
                     value = apiKey,
                     onValueChange = { apiKey = it },
-                    label = { Text("API Key") },
+                    label = { Text(s.apiKey) },
                     visualTransformation = PasswordVisualTransformation(),
                     singleLine = true,
                     modifier = Modifier.fillMaxWidth()
@@ -48,7 +68,7 @@ fun SettingsDialog(
                         value = model,
                         onValueChange = {},
                         readOnly = true,
-                        label = { Text("Model") },
+                        label = { Text(s.model) },
                         trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = modelExpanded) },
                         modifier = Modifier.menuAnchor(MenuAnchorType.PrimaryNotEditable).fillMaxWidth()
                     )
@@ -70,7 +90,7 @@ fun SettingsDialog(
 
                 Column {
                     Text(
-                        "Temperature: ${"%.1f".format(temperature)}",
+                        s.temperatureValue("%.1f".format(temperature)),
                         style = MaterialTheme.typography.bodyMedium
                     )
                     Slider(
@@ -88,7 +108,7 @@ fun SettingsDialog(
                             maxTokens = newValue
                         }
                     },
-                    label = { Text("Max Tokens (empty = default)") },
+                    label = { Text(s.maxTokensLabel) },
                     singleLine = true,
                     modifier = Modifier.fillMaxWidth()
                 )
@@ -101,7 +121,7 @@ fun SettingsDialog(
                                 connectTimeout = newValue
                             }
                         },
-                        label = { Text("Connect Timeout (sec)") },
+                        label = { Text(s.connectTimeout) },
                         singleLine = true,
                         modifier = Modifier.weight(1f)
                     )
@@ -112,7 +132,7 @@ fun SettingsDialog(
                                 readTimeout = newValue
                             }
                         },
-                        label = { Text("Read Timeout (sec)") },
+                        label = { Text(s.readTimeout) },
                         singleLine = true,
                         modifier = Modifier.weight(1f)
                     )
@@ -129,12 +149,12 @@ fun SettingsDialog(
                 settings.readTimeout = readTimeout
                 onDismiss()
             }) {
-                Text("Save")
+                Text(s.save)
             }
         },
         dismissButton = {
             TextButton(onClick = onDismiss) {
-                Text("Cancel")
+                Text(s.cancel)
             }
         }
     )

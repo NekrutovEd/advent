@@ -1,10 +1,21 @@
 package state
 
-enum class ChatOption(val label: String) {
-    STATISTICS("Statistics"),
-    SYSTEM_PROMPT("System Prompt"),
-    CONSTRAINTS("Constraints"),
-    STOP_WORDS("Stop Words"),
-    MAX_TOKENS("Max Tokens"),
-    RESPONSE_FORMAT("Response Format")
+import i18n.Strings
+
+enum class ChatOption {
+    STATISTICS,
+    SYSTEM_PROMPT,
+    CONSTRAINTS,
+    STOP_WORDS,
+    MAX_TOKENS,
+    RESPONSE_FORMAT;
+
+    fun label(strings: Strings): String = when (this) {
+        STATISTICS -> strings.optionStatistics
+        SYSTEM_PROMPT -> strings.optionSystemPrompt
+        CONSTRAINTS -> strings.optionConstraints
+        STOP_WORDS -> strings.optionStopWords
+        MAX_TOKENS -> strings.optionMaxTokens
+        RESPONSE_FORMAT -> strings.optionResponseFormat
+    }
 }

@@ -7,6 +7,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.input.key.*
 import androidx.compose.ui.unit.dp
+import i18n.LocalStrings
 
 @Composable
 fun PromptBar(
@@ -17,6 +18,7 @@ fun PromptBar(
     onClearAll: () -> Unit,
     modifier: Modifier = Modifier
 ) {
+    val s = LocalStrings.current
     Row(
         modifier = modifier.padding(8.dp),
         verticalAlignment = Alignment.CenterVertically
@@ -32,7 +34,7 @@ fun PromptBar(
                     true
                 } else false
             },
-            placeholder = { Text("Enter your message...") },
+            placeholder = { Text(s.enterMessage) },
             singleLine = true,
             enabled = enabled,
             trailingIcon = {
@@ -50,13 +52,13 @@ fun PromptBar(
             onClick = onSend,
             enabled = enabled && text.isNotBlank()
         ) {
-            Text("Send All")
+            Text(s.sendAll)
         }
 
         Spacer(Modifier.width(8.dp))
 
         OutlinedButton(onClick = onClearAll) {
-            Text("Clear All")
+            Text(s.clearAll)
         }
     }
 }

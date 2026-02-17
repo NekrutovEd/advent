@@ -7,19 +7,21 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
+import i18n.LocalStrings
 
 @Composable
 fun ConstraintsField(
     value: String,
     onValueChange: (String) -> Unit,
     modifier: Modifier = Modifier,
-    placeholder: String = "Constraints (appended to prompt)..."
+    placeholder: String? = null
 ) {
+    val s = LocalStrings.current
     OutlinedTextField(
         value = value,
         onValueChange = onValueChange,
         modifier = modifier.fillMaxWidth().padding(horizontal = 8.dp),
-        placeholder = { Text(placeholder) },
+        placeholder = { Text(placeholder ?: s.constraintsPlaceholder) },
         singleLine = true
     )
 }

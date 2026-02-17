@@ -1,6 +1,8 @@
 package state
 
 import api.ChatApi
+import i18n.EnStrings
+import i18n.RuStrings
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.test.runTest
 import okhttp3.mockwebserver.MockResponse
@@ -158,12 +160,22 @@ class ChatOptionTest {
     }
 
     @Test
-    fun `ChatOption entries have correct labels`() {
-        assertEquals("System Prompt", ChatOption.SYSTEM_PROMPT.label)
-        assertEquals("Constraints", ChatOption.CONSTRAINTS.label)
-        assertEquals("Stop Words", ChatOption.STOP_WORDS.label)
-        assertEquals("Max Tokens", ChatOption.MAX_TOKENS.label)
-        assertEquals("Statistics", ChatOption.STATISTICS.label)
-        assertEquals("Response Format", ChatOption.RESPONSE_FORMAT.label)
+    fun `ChatOption entries have correct EN labels`() {
+        assertEquals("System Prompt", ChatOption.SYSTEM_PROMPT.label(EnStrings))
+        assertEquals("Constraints", ChatOption.CONSTRAINTS.label(EnStrings))
+        assertEquals("Stop Words", ChatOption.STOP_WORDS.label(EnStrings))
+        assertEquals("Max Tokens", ChatOption.MAX_TOKENS.label(EnStrings))
+        assertEquals("Statistics", ChatOption.STATISTICS.label(EnStrings))
+        assertEquals("Response Format", ChatOption.RESPONSE_FORMAT.label(EnStrings))
+    }
+
+    @Test
+    fun `ChatOption entries have correct RU labels`() {
+        assertEquals("Системный промпт", ChatOption.SYSTEM_PROMPT.label(RuStrings))
+        assertEquals("Ограничения", ChatOption.CONSTRAINTS.label(RuStrings))
+        assertEquals("Стоп-слова", ChatOption.STOP_WORDS.label(RuStrings))
+        assertEquals("Макс. токенов", ChatOption.MAX_TOKENS.label(RuStrings))
+        assertEquals("Статистика", ChatOption.STATISTICS.label(RuStrings))
+        assertEquals("Формат ответа", ChatOption.RESPONSE_FORMAT.label(RuStrings))
     }
 }
