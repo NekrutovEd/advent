@@ -71,6 +71,33 @@ class AppState(
         }
     }
 
+    fun sendToOne(chat: ChatState, prompt: String, scope: CoroutineScope): Job? {
+        if (prompt.isBlank() || settings.apiKey.isBlank()) return null
+
+        val temperature = settings.temperature.toDouble()
+        val maxTokens = settings.maxTokensOrNull()
+        val model = settings.model
+        val apiKey = settings.apiKey
+        val connectTimeoutSec = settings.connectTimeoutSec()
+        val readTimeoutSec = settings.readTimeoutSec()
+        val globalSystemPrompt = settings.systemPrompt
+
+        val chatPrompt = applyConstraints(prompt, chat.constraints)
+        val combinedSystemPrompt = combineSystemPrompts(globalSystemPrompt, chat.systemPrompt)
+        val stop = chat.stopWords.filter { it.isNotBlank() }.ifEmpty { null }
+        val effectiveMaxTokens = chat.maxTokensOverrideOrNull() ?: maxTokens
+        val responseFormat = chat.responseFormatType
+        val jsonSchema = chat.jsonSchema
+
+        return scope.launch {
+            chat.sendMessage(
+                chatPrompt, apiKey, model, temperature, effectiveMaxTokens,
+                combinedSystemPrompt, connectTimeoutSec, readTimeoutSec,
+                stop, responseFormat, jsonSchema
+            )
+        }
+    }
+
     companion object {
         fun applyConstraints(prompt: String, constraints: String): String {
             return if (constraints.isBlank()) prompt else "$prompt\n\n$constraints"

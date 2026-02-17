@@ -10,47 +10,47 @@ import androidx.compose.ui.unit.dp
 
 @Composable
 fun PromptBar(
-    onSend: (String) -> Unit,
+    text: String,
+    onTextChange: (String) -> Unit,
+    onSend: () -> Unit,
     enabled: Boolean,
     onClearAll: () -> Unit,
     modifier: Modifier = Modifier
 ) {
-    var text by remember { mutableStateOf("") }
-
-    fun doSend() {
-        if (text.isNotBlank() && enabled) {
-            onSend(text)
-            text = ""
-        }
-    }
-
     Row(
         modifier = modifier.padding(8.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
         OutlinedTextField(
             value = text,
-            onValueChange = { text = it },
+            onValueChange = onTextChange,
             modifier = Modifier.weight(1f).onKeyEvent { event ->
                 if (event.key == Key.Enter && event.type == KeyEventType.KeyDown
                     && !event.isShiftPressed
                 ) {
-                    doSend()
+                    if (text.isNotBlank() && enabled) onSend()
                     true
                 } else false
             },
             placeholder = { Text("Enter your message...") },
             singleLine = true,
-            enabled = enabled
+            enabled = enabled,
+            trailingIcon = {
+                if (text.isNotEmpty()) {
+                    IconButton(onClick = { onTextChange("") }) {
+                        Text("\u2715")
+                    }
+                }
+            }
         )
 
         Spacer(Modifier.width(8.dp))
 
         Button(
-            onClick = { doSend() },
+            onClick = onSend,
             enabled = enabled && text.isNotBlank()
         ) {
-            Text("Send")
+            Text("Send All")
         }
 
         Spacer(Modifier.width(8.dp))

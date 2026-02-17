@@ -35,10 +35,33 @@ class ChatState(
     private val history = JSONArray()
 
     fun toggleOption(option: ChatOption) {
-        visibleOptions = if (option in visibleOptions) {
-            visibleOptions - option
+        if (option in visibleOptions) {
+            visibleOptions = visibleOptions - option
+            resetOption(option)
         } else {
-            visibleOptions + option
+            visibleOptions = visibleOptions + option
+        }
+    }
+
+    fun resetOption(option: ChatOption) {
+        when (option) {
+            ChatOption.SYSTEM_PROMPT -> systemPrompt = ""
+            ChatOption.CONSTRAINTS -> constraints = ""
+            ChatOption.STOP_WORDS -> {
+                stopWords.clear()
+                stopWords.add("")
+            }
+            ChatOption.MAX_TOKENS -> maxTokensOverride = ""
+            ChatOption.STATISTICS -> {
+                lastUsage = null
+                totalPromptTokens = 0
+                totalCompletionTokens = 0
+                totalTokens = 0
+            }
+            ChatOption.RESPONSE_FORMAT -> {
+                responseFormatType = "text"
+                jsonSchema = ""
+            }
         }
     }
 

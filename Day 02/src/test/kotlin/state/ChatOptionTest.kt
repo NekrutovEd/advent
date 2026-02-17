@@ -86,6 +86,78 @@ class ChatOptionTest {
     }
 
     @Test
+    fun `toggleOption off resets system prompt`() {
+        chatState.toggleOption(ChatOption.SYSTEM_PROMPT)
+        chatState.systemPrompt = "Custom prompt"
+        chatState.toggleOption(ChatOption.SYSTEM_PROMPT)
+        assertEquals("", chatState.systemPrompt)
+    }
+
+    @Test
+    fun `toggleOption off resets constraints`() {
+        chatState.toggleOption(ChatOption.CONSTRAINTS)
+        chatState.constraints = "Be brief"
+        chatState.toggleOption(ChatOption.CONSTRAINTS)
+        assertEquals("", chatState.constraints)
+    }
+
+    @Test
+    fun `toggleOption off resets stop words`() {
+        chatState.toggleOption(ChatOption.STOP_WORDS)
+        chatState.stopWords[0] = "END"
+        chatState.addStopWord()
+        chatState.toggleOption(ChatOption.STOP_WORDS)
+        assertEquals(1, chatState.stopWords.size)
+        assertEquals("", chatState.stopWords[0])
+    }
+
+    @Test
+    fun `toggleOption off resets max tokens`() {
+        chatState.toggleOption(ChatOption.MAX_TOKENS)
+        chatState.maxTokensOverride = "100"
+        chatState.toggleOption(ChatOption.MAX_TOKENS)
+        assertEquals("", chatState.maxTokensOverride)
+    }
+
+    @Test
+    fun `toggleOption off resets statistics`() = runTest {
+        chatState.toggleOption(ChatOption.STATISTICS)
+        // Simulate having usage data
+        val body = JSONObject().apply {
+            put("choices", org.json.JSONArray().apply {
+                put(JSONObject().apply {
+                    put("message", JSONObject().apply {
+                        put("role", "assistant")
+                        put("content", "Hi")
+                    })
+                })
+            })
+            put("usage", JSONObject().apply {
+                put("prompt_tokens", 10)
+                put("completion_tokens", 5)
+                put("total_tokens", 15)
+            })
+        }
+        server.enqueue(MockResponse().setResponseCode(200).setBody(body.toString()))
+        chatState.sendMessage("Hello", "key", "gpt-4o", null, null)
+        assertNotNull(chatState.lastUsage)
+
+        chatState.toggleOption(ChatOption.STATISTICS)
+        assertNull(chatState.lastUsage)
+        assertEquals(0, chatState.totalPromptTokens)
+    }
+
+    @Test
+    fun `toggleOption off resets response format`() {
+        chatState.toggleOption(ChatOption.RESPONSE_FORMAT)
+        chatState.responseFormatType = "json_object"
+        chatState.jsonSchema = """{"type":"object"}"""
+        chatState.toggleOption(ChatOption.RESPONSE_FORMAT)
+        assertEquals("text", chatState.responseFormatType)
+        assertEquals("", chatState.jsonSchema)
+    }
+
+    @Test
     fun `ChatOption entries have correct labels`() {
         assertEquals("System Prompt", ChatOption.SYSTEM_PROMPT.label)
         assertEquals("Constraints", ChatOption.CONSTRAINTS.label)

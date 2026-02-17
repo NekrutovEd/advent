@@ -3,7 +3,11 @@ package ui
 import androidx.compose.foundation.layout.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
@@ -14,6 +18,7 @@ import state.ChatState
 fun App(appState: AppState) {
     val scope = rememberCoroutineScope()
     val isBusy = appState.isBusy
+    var prompt by remember { mutableStateOf("") }
 
     MaterialTheme(colorScheme = darkColorScheme()) {
         Surface(color = MaterialTheme.colorScheme.background) {
@@ -37,7 +42,9 @@ fun App(appState: AppState) {
 
                 // Global user prompt
                 PromptBar(
-                    onSend = { prompt -> appState.sendToAll(prompt, scope) },
+                    text = prompt,
+                    onTextChange = { prompt = it },
+                    onSend = { if (prompt.isNotBlank()) appState.sendToAll(prompt, scope) },
                     enabled = !isBusy && appState.settings.apiKey.isNotBlank(),
                     onClearAll = { appState.clearAll() }
                 )
@@ -52,6 +59,9 @@ fun App(appState: AppState) {
                         ChatColumn(
                             title = "Chat ${index + 1}",
                             chatState = chatState,
+                            prompt = prompt,
+                            onSend = { appState.sendToOne(chatState, prompt, scope) },
+                            enabled = !chatState.isLoading && appState.settings.apiKey.isNotBlank(),
                             onDrop = if (index > 0) {{ appState.removeChat(index) }} else null,
                             modifier = Modifier.weight(1f).fillMaxHeight()
                         )
@@ -82,12 +92,18 @@ fun App(appState: AppState) {
 private fun ChatColumn(
     title: String,
     chatState: ChatState,
+    prompt: String,
+    onSend: () -> Unit,
+    enabled: Boolean,
     onDrop: (() -> Unit)? = null,
     modifier: Modifier = Modifier
 ) {
     ChatPanel(
         title = title,
         chatState = chatState,
+        prompt = prompt,
+        onSend = onSend,
+        enabled = enabled,
         modifier = modifier,
         onDrop = onDrop
     )

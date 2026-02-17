@@ -25,6 +25,9 @@ import state.ChatState
 fun ChatPanel(
     title: String,
     chatState: ChatState,
+    prompt: String,
+    onSend: () -> Unit,
+    enabled: Boolean,
     modifier: Modifier = Modifier,
     onDrop: (() -> Unit)? = null
 ) {
@@ -76,6 +79,12 @@ fun ChatPanel(
                 }
             }
             Row {
+                TextButton(
+                    onClick = onSend,
+                    enabled = enabled && prompt.isNotBlank()
+                ) {
+                    Text("Send", color = MaterialTheme.colorScheme.primary)
+                }
                 TextButton(onClick = { chatState.clear() }) {
                     Text("Clear")
                 }

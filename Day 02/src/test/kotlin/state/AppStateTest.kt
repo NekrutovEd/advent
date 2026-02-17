@@ -343,4 +343,44 @@ class AppStateTest {
         val body2 = JSONObject(req2.body.readUtf8())
         assertFalse(body2.has("response_format"))
     }
+
+    // --- sendToOne tests ---
+
+    @Test
+    fun `sendToOne sends only to target chat`() = runTest {
+        enqueueSuccess("R1")
+
+        val job = appState.sendToOne(appState.chats[0], "Hello", this)
+        job?.join()
+
+        assertEquals(2, appState.chats[0].messages.size)
+        assertEquals(0, appState.chats[1].messages.size)
+    }
+
+    @Test
+    fun `sendToOne returns null for blank prompt`() = runTest {
+        val job = appState.sendToOne(appState.chats[0], "", this)
+        assertNull(job)
+    }
+
+    @Test
+    fun `sendToOne returns null for blank apiKey`() = runTest {
+        appState.settings.apiKey = ""
+        val job = appState.sendToOne(appState.chats[0], "Hello", this)
+        assertNull(job)
+    }
+
+    @Test
+    fun `sendToOne uses per-chat maxTokens override`() = runTest {
+        enqueueSuccess("R1")
+
+        appState.settings.maxTokens = "500"
+        appState.chats[0].maxTokensOverride = "100"
+        val job = appState.sendToOne(appState.chats[0], "Hello", this)
+        job?.join()
+
+        val req = server.takeRequest()
+        val body = JSONObject(req.body.readUtf8())
+        assertEquals(100, body.getInt("max_tokens"))
+    }
 }
