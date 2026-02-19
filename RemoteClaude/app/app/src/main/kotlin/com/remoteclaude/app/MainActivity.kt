@@ -6,7 +6,10 @@ import android.util.Log
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.compose.runtime.*
+import androidx.lifecycle.ViewModel
+import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.viewmodel.compose.viewModel
+import com.remoteclaude.app.data.ws.WsClient
 import com.remoteclaude.app.ui.screens.ConnectScreen
 import com.remoteclaude.app.ui.screens.LaunchAgentScreen
 import com.remoteclaude.app.ui.screens.QrScannerScreen
@@ -38,9 +41,22 @@ class MainActivity : ComponentActivity() {
 @Composable
 fun RemoteClaudeNavHost(deepLinkIntent: Intent?) {
     val connectVm: ConnectViewModel = viewModel()
-    val terminalVm = remember { TerminalViewModel(connectVm.wsClient) }
+    val terminalVm: TerminalViewModel = viewModel(
+        factory = object : ViewModelProvider.Factory {
+            @Suppress("UNCHECKED_CAST")
+            override fun <T : ViewModel> create(modelClass: Class<T>): T {
+                return TerminalViewModel(connectVm.wsClient) as T
+            }
+        }
+    )
 
-    var screen by remember { mutableStateOf<Screen>(Screen.Connect) }
+    // Derive initial screen from connection state so rotation preserves it
+    val initialScreen = when (connectVm.wsClient.connectionState.value) {
+        is WsClient.ConnectionState.Connected,
+        is WsClient.ConnectionState.Reconnecting -> Screen.Terminal
+        else -> Screen.Connect
+    }
+    var screen by remember { mutableStateOf(initialScreen) }
 
     Log.d(TAG, "NavHost: compose, screen=${screen::class.simpleName}")
 
@@ -79,8 +95,12 @@ fun RemoteClaudeNavHost(deepLinkIntent: Intent?) {
         is Screen.Terminal -> TerminalScreen(
             viewModel = terminalVm,
             onDisconnect = {
+                connectVm.cancelReconnect()
                 connectVm.wsClient.disconnect()
                 screen = Screen.Connect
+            },
+            onCancelReconnect = {
+                connectVm.cancelReconnect()
             },
         )
         is Screen.Launch -> LaunchAgentScreen(

@@ -5,16 +5,23 @@ import android.net.nsd.NsdManager
 import android.net.nsd.NsdServiceInfo
 import android.net.wifi.WifiManager
 import android.util.Log
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.*
+import kotlinx.coroutines.launch
+import java.util.concurrent.ConcurrentHashMap
 
 private const val TAG = "RemoteClaude"
+private const val EXPIRY_CHECK_INTERVAL_MS = 30_000L
+private const val EXPIRY_TTL_MS = 60_000L
 
 data class DiscoveredServer(
     val name: String,
     val host: String,
     val port: Int,
 ) {
-    val wsUrl get() = "ws://$host:$port/terminal"
+    val wsUrl get() = "ws://$host:$port/app"
     val displayName get() = name.removePrefix("RemoteClaude@").take(30)
 }
 
@@ -27,8 +34,10 @@ class MdnsDiscovery(context: Context) {
 
     private var discoveryListener: NsdManager.DiscoveryListener? = null
     private var multicastLock: WifiManager.MulticastLock? = null
+    private val lastSeen = ConcurrentHashMap<String, Long>()
+    private var expiryJob: Job? = null
 
-    fun startDiscovery() {
+    fun startDiscovery(scope: CoroutineScope) {
         if (discoveryListener != null) {
             Log.d(TAG, "mDNS discovery already running, skipping")
             return
@@ -73,6 +82,7 @@ class MdnsDiscovery(context: Context) {
                             Log.w(TAG, "mDNS: host is null for ${info.serviceName}, skipping")
                             return
                         }
+                        lastSeen[host] = System.currentTimeMillis()
                         val server = DiscoveredServer(
                             name = info.serviceName,
                             host = host,
@@ -86,17 +96,34 @@ class MdnsDiscovery(context: Context) {
 
             override fun onServiceLost(serviceInfo: NsdServiceInfo) {
                 Log.d(TAG, "mDNS: service lost: ${serviceInfo.serviceName}")
+                val removed = _servers.value.filter { it.name == serviceInfo.serviceName }
+                removed.forEach { lastSeen.remove(it.host) }
                 _servers.value = _servers.value.filter { it.name != serviceInfo.serviceName }
             }
         }
 
         discoveryListener = listener
-        Log.d(TAG, "mDNS: starting discovery for _claudemobile._tcp")
-        nsdManager.discoverServices("_claudemobile._tcp", NsdManager.PROTOCOL_DNS_SD, listener)
+        Log.d(TAG, "mDNS: starting discovery for _claudeserver._tcp")
+        nsdManager.discoverServices("_claudeserver._tcp", NsdManager.PROTOCOL_DNS_SD, listener)
+
+        expiryJob = scope.launch {
+            while (true) {
+                delay(EXPIRY_CHECK_INTERVAL_MS)
+                val now = System.currentTimeMillis()
+                val expired = lastSeen.entries.filter { now - it.value > EXPIRY_TTL_MS }.map { it.key }
+                if (expired.isNotEmpty()) {
+                    Log.d(TAG, "mDNS: expiring servers: $expired")
+                    expired.forEach { lastSeen.remove(it) }
+                    _servers.value = _servers.value.filter { it.host !in expired }
+                }
+            }
+        }
     }
 
     fun stopDiscovery() {
         Log.d(TAG, "mDNS: stopping discovery")
+        expiryJob?.cancel()
+        expiryJob = null
         multicastLock?.release()
         multicastLock = null
         discoveryListener?.let {

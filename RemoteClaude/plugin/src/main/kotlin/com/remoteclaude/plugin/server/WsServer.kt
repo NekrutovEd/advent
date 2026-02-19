@@ -1,6 +1,7 @@
 package com.remoteclaude.plugin.server
 
 import com.intellij.openapi.components.Service
+import com.intellij.openapi.diagnostic.Logger
 import com.intellij.openapi.project.Project
 import io.ktor.http.*
 import io.ktor.server.application.*
@@ -9,18 +10,21 @@ import io.ktor.server.netty.*
 import io.ktor.server.request.*
 import io.ktor.server.response.*
 import io.ktor.server.routing.*
-import io.ktor.server.websocket.*
-import io.ktor.websocket.*
 import kotlinx.coroutines.*
 import kotlinx.serialization.json.*
+import java.io.File
 import java.net.ServerSocket
-import kotlin.time.Duration.Companion.seconds
 
+/**
+ * Minimal local HTTP server — only keeps the /api/notify endpoint for Claude Code hooks.
+ * The WebSocket server is replaced by WsPluginClient connecting to the central server.
+ */
 @Service(Service.Level.PROJECT)
 class WsServer(private val project: Project) {
 
+    private val LOG = Logger.getInstance(WsServer::class.java)
+
     val registry = TabRegistry()
-    val sessionManager = WsSessionManager()
     var port: Int = 0
         private set
 
@@ -30,85 +34,62 @@ class WsServer(private val project: Project) {
     fun start() {
         port = findFreePort()
         engine = embeddedServer(Netty, port = port) {
-            install(WebSockets) {
-                pingPeriod = 15.seconds
-                timeout = 30.seconds
-            }
             routing {
-                webSocket("/terminal") {
-                    sessionManager.addClient(this, registry)
-                    try {
-                        for (frame in incoming) {
-                            if (frame is Frame.Text) {
-                                handleClientFrame(frame.readText())
-                            }
-                        }
-                    } finally {
-                        sessionManager.removeClient(this)
-                    }
-                }
-
-                // HTTP endpoint for Claude Code hooks (Notification event)
+                // HTTP endpoint for Claude Code hooks (Notification / Stop events)
                 post("/api/notify") {
                     val body = call.receiveText()
                     try {
                         val json = Json.parseToJsonElement(body).jsonObject
-                        val tabId = json["tabId"]?.jsonPrimitive?.intOrNull ?: 0
                         val message = json["message"]?.jsonPrimitive?.contentOrNull ?: ""
-                        scope.launch {
-                            sessionManager.broadcast(
-                                TabStateMessage(tabId, TabState.WAITING_INPUT, message)
-                            )
+                        // Find the most recently active tab (the one that just produced output)
+                        val tabId = registry.findMostRecentlyActiveTab()
+                            ?: json["tabId"]?.jsonPrimitive?.intOrNull
+                            ?: registry.getAllTabs().firstOrNull()?.id
+                        if (tabId != null) {
+                            // Forward notification to central server via WsPluginClient
+                            scope.launch {
+                                val client = WsPluginClient.getInstance(project)
+                                client.send(
+                                    PluginTabStateMessage(client.pluginId, tabId, TabState.WAITING_INPUT, message)
+                                )
+                            }
+                            // Also update local registry
+                            registry.updateTabState(tabId, TabState.WAITING_INPUT, message)
                         }
                     } catch (e: Exception) {
-                        // Malformed body — still respond OK
+                        LOG.warn("RemoteClaude: /api/notify parse error: ${e.message}")
                     }
                     call.respond(HttpStatusCode.OK, "ok")
                 }
             }
         }.also { it.start(wait = false) }
-    }
-
-    private suspend fun DefaultWebSocketSession.handleClientFrame(text: String) {
-        val message = try {
-            wsJson.decodeFromString(WsMessage.serializer(), text)
-        } catch (e: Exception) {
-            return
-        }
-
-        when (message) {
-            is InputMessage -> {
-                com.remoteclaude.plugin.terminal.TerminalTabsWatcher.getInstance(project)
-                    .sendInput(message.tabId, message.data)
-            }
-            is RequestBufferMessage -> {
-                val buf = registry.getBuffer(message.tabId)?.getSnapshot() ?: ""
-                sessionManager.sendTo(this, BufferMessage(message.tabId, buf))
-            }
-            is ListProjectsMessage -> {
-                val projects = com.remoteclaude.plugin.orchestration.ProjectRegistry.getInstance().allProjects()
-                sessionManager.sendTo(this, ProjectsListMessage(projects))
-            }
-            is LaunchAgentMessage -> {
-                com.remoteclaude.plugin.orchestration.AgentLauncher.getInstance(project).launch(
-                    message, scope, registry, sessionManager
-                )
-            }
-            is TerminateAgentMessage -> {
-                com.remoteclaude.plugin.orchestration.AgentLauncher.getInstance(project).terminate(message.tabId)
-            }
-            is AddProjectMessage -> {
-                com.remoteclaude.plugin.orchestration.ProjectRegistry.getInstance().addProject(message.path)
-            }
-            else -> {
-                // Server-only messages arriving from client — ignore
-            }
-        }
+        writePortFile(port)
+        LOG.info("RemoteClaude: local HTTP server started on port $port (for /api/notify)")
     }
 
     fun stop() {
         engine?.stop(500, 1000)
         scope.cancel()
+        deletePortFile()
+    }
+
+    /** Write the actual port to ~/.claude/.remoteclaude-port so hooks can read it */
+    private fun writePortFile(port: Int) {
+        try {
+            val portFile = File(System.getProperty("user.home"), ".claude/.remoteclaude-port")
+            portFile.parentFile?.mkdirs()
+            portFile.writeText(port.toString())
+            LOG.info("RemoteClaude: wrote port $port to ${portFile.absolutePath}")
+        } catch (e: Exception) {
+            LOG.warn("RemoteClaude: failed to write port file: ${e.message}")
+        }
+    }
+
+    private fun deletePortFile() {
+        try {
+            val portFile = File(System.getProperty("user.home"), ".claude/.remoteclaude-port")
+            portFile.delete()
+        } catch (_: Exception) {}
     }
 
     private fun findFreePort(): Int {

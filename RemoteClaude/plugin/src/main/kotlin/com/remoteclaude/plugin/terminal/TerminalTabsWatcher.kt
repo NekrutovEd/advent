@@ -26,7 +26,11 @@ class TerminalTabsWatcher(private val project: Project) {
     // Map content display name -> tabId for removal lookups
     private val contentToTabId = mutableMapOf<String, Int>()
 
-    fun start(server: WsServer) {
+    // Reference to the local WsServer's registry (for local tab tracking + buffers)
+    private val registry: TabRegistry
+        get() = WsServer.getInstance(project).registry
+
+    fun start(client: WsPluginClient) {
         scope.launch {
             val toolWindow = ToolWindowManager.getInstance(project)
                 .getToolWindow("Terminal") ?: return@launch
@@ -35,46 +39,47 @@ class TerminalTabsWatcher(private val project: Project) {
 
             contentManager.addContentManagerListener(object : ContentManagerListener {
                 override fun contentAdded(event: ContentManagerEvent) {
-                    scope.launch { onTabAdded(event.content, server) }
+                    scope.launch { onTabAdded(event.content, client) }
                 }
 
                 override fun contentRemoved(event: ContentManagerEvent) {
-                    scope.launch { onTabRemoved(event.content, server) }
+                    scope.launch { onTabRemoved(event.content, client) }
                 }
             })
 
             // Register already-open tabs
             withContext(Dispatchers.Main) {
                 contentManager.contents.forEach { content ->
-                    scope.launch { onTabAdded(content, server) }
+                    scope.launch { onTabAdded(content, client) }
                 }
             }
         }
     }
 
-    private suspend fun onTabAdded(content: com.intellij.ui.content.Content, server: WsServer) {
+    private suspend fun onTabAdded(content: com.intellij.ui.content.Content, client: WsPluginClient) {
         val title = content.displayName ?: "Terminal"
-        val tabInfo = server.registry.registerTab(title, null)
+        val tabInfo = registry.registerTab(title, null)
 
         contentToTabId[title] = tabInfo.id
+        tabContents[tabInfo.id] = content
 
         scope.launch(Dispatchers.IO) {
-            attachOutputInterceptor(content, tabInfo.id, server)
+            attachOutputInterceptor(content, tabInfo.id, client)
         }
 
-        server.sessionManager.broadcast(TabAddedMessage(tabInfo))
+        client.send(PluginTabAddedMessage(client.pluginId, tabInfo))
     }
 
-    private suspend fun onTabRemoved(content: com.intellij.ui.content.Content, server: WsServer) {
+    private suspend fun onTabRemoved(content: com.intellij.ui.content.Content, client: WsPluginClient) {
         val title = content.displayName ?: return
         val tabId = contentToTabId.remove(title)
-            ?: server.registry.removeTabByTitle(title)
+            ?: registry.removeTabByTitle(title)
             ?: return
         inputSenders.remove(tabId)
         tabContents.remove(tabId)
         cachedConnectors.remove(tabId)
-        server.registry.removeTab(tabId)
-        server.sessionManager.broadcast(TabRemovedMessage(tabId))
+        registry.removeTab(tabId)
+        client.send(PluginTabRemovedMessage(client.pluginId, tabId))
     }
 
     // ── Main attachment logic ──────────────────────────────────────────────
@@ -82,7 +87,7 @@ class TerminalTabsWatcher(private val project: Project) {
     private suspend fun attachOutputInterceptor(
         content: com.intellij.ui.content.Content,
         tabId: Int,
-        server: WsServer,
+        client: WsPluginClient,
     ) {
         var asyncCallbackRegistered = false
         val asyncConnector = CompletableDeferred<com.jediterm.terminal.TtyConnector>()
@@ -116,16 +121,12 @@ class TerminalTabsWatcher(private val project: Project) {
         }
 
         // Phase 1: Try Editor-based I/O first (non-destructive output — preferred)
-        // TtyConnector.read() is DESTRUCTIVE: it competes with the terminal emulator for data
-        // from the same PTY stream, causing garbled display in the IDE. Editor Document polling
-        // reads the already-rendered text without interfering with terminal rendering.
         LOG.info("RemoteClaude: [tab $tabId] Phase 1: trying Editor-based I/O (non-destructive)...")
         for (attempt in 1..5) {
             delay(500)
-            val editorSetup = setupEditorBasedIO(content, tabId, server)
+            val editorSetup = setupEditorBasedIO(content, tabId, client)
             if (editorSetup) {
                 LOG.info("RemoteClaude: [tab $tabId] Editor-based I/O active (attempt $attempt)")
-                // Upgrade input to TtyConnector.write() when available (write is safe, only read is destructive)
                 if (asyncCallbackRegistered) {
                     scope.launch {
                         val c = withTimeoutOrNull(300_000L) { asyncConnector.await() }
@@ -143,9 +144,7 @@ class TerminalTabsWatcher(private val project: Project) {
             }
         }
 
-        // Phase 2: No Editor — try TtyConnector for full I/O (classic JediTerm terminal)
-        // WARNING: TtyConnector.read() is destructive and may cause display corruption.
-        // This path is only used when Editor-based I/O is unavailable (older IntelliJ versions).
+        // Phase 2: No Editor — try TtyConnector for full I/O
         LOG.info("RemoteClaude: [tab $tabId] Phase 2: Editor not found, trying TtyConnector for full I/O...")
         dumpWidgetDiagnostics(content, tabId)
 
@@ -154,7 +153,6 @@ class TerminalTabsWatcher(private val project: Project) {
         for (attempt in 1..5) {
             val component = content.component
 
-            // Strategy 1: method-based search (classic JBTerminalWidget)
             if (component != null) {
                 connector = findTtyConnectorByMethod(component)
                 if (connector != null) {
@@ -163,14 +161,12 @@ class TerminalTabsWatcher(private val project: Project) {
                 }
             }
 
-            // Strategy 2: check if async TtyConnector has resolved
             if (asyncConnector.isCompleted) {
                 connector = asyncConnector.await()
                 LOG.info("RemoteClaude: [tab $tabId] got TtyConnector from async callback")
                 break
             }
 
-            // Strategy 3: deep field-based search on AWT component tree
             if (component != null) {
                 connector = findTtyConnectorDeep(component)
                 if (connector != null) {
@@ -183,7 +179,7 @@ class TerminalTabsWatcher(private val project: Project) {
         }
 
         if (connector != null) {
-            startConnectorIO(tabId, connector, server)
+            startConnectorIO(tabId, connector, client)
             return
         }
 
@@ -192,7 +188,7 @@ class TerminalTabsWatcher(private val project: Project) {
             LOG.info("RemoteClaude: [tab $tabId] waiting for async TtyConnector (60s)...")
             connector = withTimeoutOrNull(60_000L) { asyncConnector.await() }
             if (connector != null) {
-                startConnectorIO(tabId, connector, server)
+                startConnectorIO(tabId, connector, client)
                 return
             }
         }
@@ -200,15 +196,11 @@ class TerminalTabsWatcher(private val project: Project) {
         LOG.warn("RemoteClaude: [tab $tabId] ALL I/O strategies failed")
     }
 
-    /**
-     * Sets up input sender and output reading loop for a connected TtyConnector.
-     */
     private suspend fun startConnectorIO(
         tabId: Int,
         connector: com.jediterm.terminal.TtyConnector,
-        server: WsServer,
+        client: WsPluginClient,
     ) {
-        // Wait for the connector to become connected
         for (attempt in 1..40) {
             if (connector.isConnected) break
             delay(250)
@@ -218,7 +210,6 @@ class TerminalTabsWatcher(private val project: Project) {
             return
         }
 
-        // Cache connector for direct I/O + store as input sender
         cachedConnectors[tabId] = connector
         inputSenders[tabId] = { text ->
             try {
@@ -228,10 +219,9 @@ class TerminalTabsWatcher(private val project: Project) {
             }
         }
 
-        // Start output reader
         LOG.info("RemoteClaude: [tab $tabId] starting output reader, connector=${connector.javaClass.name}")
-        server.registry.updateTabState(tabId, TabState.RUNNING)
-        server.sessionManager.broadcast(TabStateMessage(tabId, TabState.RUNNING))
+        registry.updateTabState(tabId, TabState.RUNNING)
+        client.send(PluginTabStateMessage(client.pluginId, tabId, TabState.RUNNING))
 
         val buf = CharArray(4096)
         val ctx = currentCoroutineContext()
@@ -244,17 +234,17 @@ class TerminalTabsWatcher(private val project: Project) {
                 val n = connector.read(buf, 0, buf.size)
                 if (n > 0) {
                     val data = String(buf, 0, n)
-                    server.registry.getBuffer(tabId)?.append(data)
+                    registry.getBuffer(tabId)?.append(data)
+                    registry.touchOutput(tabId)
 
-                    val currentState = server.registry.getTabInfo(tabId)?.state
-                        ?: TabState.RUNNING
+                    val currentState = registry.getTabInfo(tabId)?.state ?: TabState.RUNNING
                     val newState = AgentLifecycleMonitor.analyze(data, currentState)
 
                     if (newState != currentState) {
-                        server.registry.updateTabState(tabId, newState)
-                        server.sessionManager.broadcast(TabStateMessage(tabId, newState))
+                        registry.updateTabState(tabId, newState)
+                        client.send(PluginTabStateMessage(client.pluginId, tabId, newState))
                     }
-                    server.sessionManager.broadcast(OutputMessage(tabId, data))
+                    client.send(PluginOutputMessage(client.pluginId, tabId, data))
                 } else if (n < 0) {
                     LOG.info("RemoteClaude: [tab $tabId] EOF")
                     break
@@ -270,16 +260,11 @@ class TerminalTabsWatcher(private val project: Project) {
 
     // ── Phase 2: Editor-based I/O for IntelliJ 2025.2 block terminal ─────
 
-    /**
-     * Sets up output capture via Document polling (not DocumentListener to avoid EDT interference),
-     * and input via process outputStream or TerminalInput reflection.
-     */
     private suspend fun setupEditorBasedIO(
         content: com.intellij.ui.content.Content,
         tabId: Int,
-        server: WsServer,
+        client: WsPluginClient,
     ): Boolean {
-        // Find EditorComponentImpl in AWT tree (must be on EDT)
         val editorComponent = withContext(Dispatchers.Main) {
             val root = content.component ?: return@withContext null
             findAwtComponentByClassName(root, "EditorComponentImpl")
@@ -290,7 +275,6 @@ class TerminalTabsWatcher(private val project: Project) {
         }
         LOG.info("RemoteClaude: [tab $tabId] found EditorComponentImpl: ${editorComponent.javaClass.name}")
 
-        // Get Editor via getEditor() method
         val editor = withContext(Dispatchers.Main) {
             try {
                 val method = editorComponent.javaClass.getMethod("getEditor")
@@ -308,57 +292,72 @@ class TerminalTabsWatcher(private val project: Project) {
         val document = editor.document
         LOG.info("RemoteClaude: [tab $tabId] got Document, textLength=${document.textLength}")
 
-        // Output: poll document every 50ms instead of DocumentListener (avoids EDT interference)
-        // Reads text + markup highlighters in a single EDT call for consistency,
-        // then encodes colors as ANSI escape codes for xterm.js rendering.
+        // Output: poll document every 50ms
         scope.launch {
             var lastStamp = withContext(Dispatchers.Main) { document.modificationStamp }
             var lastText = withContext(Dispatchers.Main) { document.text }
 
-            // Default foreground — text with this color won't get ANSI codes (uses xterm.js default)
             val defaultFg = withContext(Dispatchers.Main) { editor.colorsScheme.defaultForeground }
 
-            // Send initial content (with colors)
+            // Send initial content
             if (lastText.isNotEmpty()) {
                 val initialHighlighters = withContext(Dispatchers.Main) {
                     AnsiColorEncoder.getHighlightersForRange(editor, 0, lastText.length)
                 }
                 val colorized = AnsiColorEncoder.encode(lastText, initialHighlighters, 0, lastText.length, defaultFg)
-                server.registry.getBuffer(tabId)?.append(colorized)
-                server.sessionManager.broadcast(OutputMessage(tabId, colorized))
-                LOG.info("RemoteClaude: [tab $tabId] sent initial document text (${lastText.length} chars, ${initialHighlighters.size} highlighters)")
+                registry.getBuffer(tabId)?.append(colorized)
+                registry.touchOutput(tabId)
+                client.send(PluginOutputMessage(client.pluginId, tabId, colorized))
+                LOG.info("RemoteClaude: [tab $tabId] sent initial document text (${lastText.length} chars)")
+
+                // Analyze initial state from existing terminal content
+                val initialState = AgentLifecycleMonitor.analyze(lastText.takeLast(1000), TabState.RUNNING)
+                if (initialState != TabState.RUNNING) {
+                    registry.updateTabState(tabId, initialState)
+                    client.send(PluginTabStateMessage(client.pluginId, tabId, initialState))
+                }
             }
 
             while (isActive) {
                 delay(50)
-                // Read text, stamp, and highlighters in a single EDT call for consistency
                 val (currentStamp, currentText) = withContext(Dispatchers.Main) {
                     document.modificationStamp to document.text
                 }
                 if (currentStamp != lastStamp) {
+                    var rawTextForAnalysis: String
                     if (currentText.startsWith(lastText)) {
                         val deltaStart = lastText.length
                         val deltaEnd = currentText.length
+                        rawTextForAnalysis = currentText.substring(deltaStart, deltaEnd)
                         if (deltaStart < deltaEnd) {
                             val highlighters = withContext(Dispatchers.Main) {
                                 AnsiColorEncoder.getHighlightersForRange(editor, deltaStart, deltaEnd)
                             }
                             val delta = AnsiColorEncoder.encode(currentText, highlighters, deltaStart, deltaEnd, defaultFg)
-                            server.registry.getBuffer(tabId)?.append(delta)
-                            server.sessionManager.broadcast(OutputMessage(tabId, delta))
+                            registry.getBuffer(tabId)?.append(delta)
+                            registry.touchOutput(tabId)
+                            client.send(PluginOutputMessage(client.pluginId, tabId, delta))
                         }
                     } else {
-                        // Document was modified/cleared — send full refresh with colors
+                        rawTextForAnalysis = currentText.takeLast(1000)
                         val highlighters = withContext(Dispatchers.Main) {
                             AnsiColorEncoder.getHighlightersForRange(editor, 0, currentText.length)
                         }
                         val colorized = AnsiColorEncoder.encode(currentText, highlighters, 0, currentText.length, defaultFg)
-                        server.registry.getBuffer(tabId)?.clear()
-                        server.registry.getBuffer(tabId)?.append(colorized)
-                        server.sessionManager.broadcast(
-                            OutputMessage(tabId, "\u001b[2J\u001b[H$colorized")
-                        )
+                        registry.getBuffer(tabId)?.clear()
+                        registry.getBuffer(tabId)?.append(colorized)
+                        registry.touchOutput(tabId)
+                        client.send(PluginOutputMessage(client.pluginId, tabId, "\u001b[2J\u001b[H$colorized"))
                     }
+
+                    // Analyze state from raw document text (no ANSI codes)
+                    val currentState = registry.getTabInfo(tabId)?.state ?: TabState.RUNNING
+                    val newState = AgentLifecycleMonitor.analyze(rawTextForAnalysis, currentState)
+                    if (newState != currentState) {
+                        registry.updateTabState(tabId, newState)
+                        client.send(PluginTabStateMessage(client.pluginId, tabId, newState))
+                    }
+
                     lastStamp = currentStamp
                     lastText = currentText
                 }
@@ -368,19 +367,19 @@ class TerminalTabsWatcher(private val project: Project) {
         // Store content ref for lazy TtyConnector search at send time
         tabContents[tabId] = content
 
-        // Input: try multiple strategies (UI-based fallback, used only if lazy TtyConnector search fails)
+        // Input setup
         inputSenders[tabId] = setupInputSender(content, tabId, editor)
 
         // Mark running
-        server.registry.updateTabState(tabId, TabState.RUNNING)
+        registry.updateTabState(tabId, TabState.RUNNING)
         scope.launch {
-            server.sessionManager.broadcast(TabStateMessage(tabId, TabState.RUNNING))
-            server.sessionManager.broadcast(OutputMessage(tabId,
+            client.send(PluginTabStateMessage(client.pluginId, tabId, TabState.RUNNING))
+            client.send(PluginOutputMessage(client.pluginId, tabId,
                 "\r\n--- [RemoteClaude] Editor I/O active for tab $tabId ---\r\n"
             ))
         }
 
-        LOG.info("RemoteClaude: [tab $tabId] Editor-based I/O ready (output: polling, input: see above)")
+        LOG.info("RemoteClaude: [tab $tabId] Editor-based I/O ready")
         return true
     }
 
@@ -399,38 +398,22 @@ class TerminalTabsWatcher(private val project: Project) {
         return null
     }
 
-    /**
-     * Multi-strategy input setup. Tries (in order):
-     * 1. Find Process/PtyProcess -> write to outputStream (handles \n natively)
-     * 2. TerminalInput methods that accept String (+ EditorEnter action for \n)
-     * 3. TerminalInput.bufferChannel.trySend (+ EditorEnter action for \n)
-     * 4. KeyEvent dispatch (+ EditorEnter action for \n)
-     */
     private fun setupInputSender(
         content: com.intellij.ui.content.Content,
         tabId: Int,
         editor: com.intellij.openapi.editor.Editor,
     ): (String) -> Unit {
-        // Strategy 1: Find Process and write to its outputStream
-        // This handles \n natively (goes directly to process stdin)
         val processSender = findProcessSender(content, tabId)
         if (processSender != null) return processSender
 
-        // For strategies 2-4, \n must be dispatched via EditorEnter action
-        // because block terminal handles Enter through IntelliJ's action system
-
-        // Strategy 2: TerminalInput — try public/internal methods
         val terminalInput = findObjectByClassName(content, "TerminalInput", maxDepth = 8)
         if (terminalInput != null) {
             LOG.info("RemoteClaude: [tab $tabId] TerminalInput found: ${terminalInput.javaClass.name}")
 
-            // Collect candidate methods, prioritizing sendString (handles \n natively)
             val candidateMethods = mutableListOf<java.lang.reflect.Method>()
             var c: Class<*>? = terminalInput.javaClass
             while (c != null && c != Any::class.java) {
                 for (m in c.declaredMethods) {
-                    val params = m.parameterTypes.joinToString(", ") { it.simpleName }
-                    LOG.info("RemoteClaude: [tab $tabId] TerminalInput method: ${m.name}($params): ${m.returnType.simpleName}")
                     if (m.parameterCount == 1 &&
                         (m.parameterTypes[0] == String::class.java ||
                          m.parameterTypes[0] == CharSequence::class.java)
@@ -441,8 +424,6 @@ class TerminalTabsWatcher(private val project: Project) {
                 c = c.superclass
             }
 
-            // Prioritize: sendString (raw PTY input, handles \n natively) > sendBytes > others
-            // sendBracketedString wraps text in escape sequences and can't handle \n as Enter
             val prioritized = candidateMethods.sortedBy { m ->
                 when (m.name) {
                     "sendString" -> 0
@@ -455,12 +436,10 @@ class TerminalTabsWatcher(private val project: Project) {
             for (m in prioritized) {
                 LOG.info("RemoteClaude: [tab $tabId] trying TerminalInput.${m.name}(String) for input")
                 m.isAccessible = true
-                // sendString/sendBytes handle \n natively (goes directly to PTY)
                 if (m.name == "sendString") {
                     LOG.info("RemoteClaude: [tab $tabId] input via TerminalInput.sendString() (native \\n)")
                     return { text -> m.invoke(terminalInput, text) }
                 }
-                // For other methods, test and wrap with EditorEnter for \n handling
                 try {
                     m.invoke(terminalInput, " ")
                     LOG.info("RemoteClaude: [tab $tabId] input via TerminalInput.${m.name}() + EditorEnter")
@@ -470,14 +449,12 @@ class TerminalTabsWatcher(private val project: Project) {
                 }
             }
 
-            // Strategy 3: bufferChannel.trySend
             val channelSender = setupBufferChannelSender(terminalInput, tabId)
             if (channelSender != null) return wrapWithEditorEnter(editor, tabId, channelSender)
         } else {
             LOG.info("RemoteClaude: [tab $tabId] TerminalInput NOT found in field graph")
         }
 
-        // Strategy 4: KeyEvent dispatch to editor content component + EditorEnter for \n
         LOG.info("RemoteClaude: [tab $tabId] input via KeyEvent dispatch + EditorEnter")
         val contentComponent = try {
             editor.contentComponent
@@ -509,17 +486,12 @@ class TerminalTabsWatcher(private val project: Project) {
         }
     }
 
-    /**
-     * Wraps a text-typing sender: strips newlines from text, dispatches Enter
-     * via EditorActionHandler for each \n (block terminal requires this).
-     */
     private fun wrapWithEditorEnter(
         editor: com.intellij.openapi.editor.Editor,
         tabId: Int,
         typeSender: (String) -> Unit,
     ): (String) -> Unit {
         return { text ->
-            // Split text on newlines: type each part, dispatch Enter for each \n
             val parts = text.split('\n', '\r')
             val endsWithNewline = text.endsWith("\n") || text.endsWith("\r")
             for ((index, part) in parts.withIndex()) {
@@ -530,7 +502,6 @@ class TerminalTabsWatcher(private val project: Project) {
                         LOG.warn("RemoteClaude: [tab $tabId] typeSender failed: ${e.cause?.message ?: e.message}")
                     }
                 }
-                // Dispatch Enter for each newline boundary (not after last part unless text ends with \n)
                 if (index < parts.size - 1 || endsWithNewline) {
                     dispatchEditorEnter(editor, tabId)
                 }
@@ -538,10 +509,6 @@ class TerminalTabsWatcher(private val project: Project) {
         }
     }
 
-    /**
-     * Dispatch Enter via IntelliJ's EditorActionHandler (handles block terminal's
-     * custom Enter behavior — command submission instead of newline insertion).
-     */
     private fun dispatchEditorEnter(editor: com.intellij.openapi.editor.Editor, tabId: Int) {
         javax.swing.SwingUtilities.invokeLater {
             try {
@@ -561,13 +528,11 @@ class TerminalTabsWatcher(private val project: Project) {
         }
     }
 
-    /** Search for a Process (PtyProcess, WinPtyProcess, etc.) and return a sender that writes to its outputStream. */
     private fun findProcessSender(content: com.intellij.ui.content.Content, tabId: Int): ((String) -> Unit)? {
         for (className in listOf("PtyProcess", "WinPtyProcess", "UnixPtyProcess")) {
             val processObj = findObjectByClassName(content, className, maxDepth = 10) ?: continue
             LOG.info("RemoteClaude: [tab $tabId] found $className: ${processObj.javaClass.name}")
 
-            // Try direct Process cast
             if (processObj is Process && processObj.isAlive) {
                 LOG.info("RemoteClaude: [tab $tabId] input via ${processObj.javaClass.simpleName}.outputStream")
                 val os = processObj.outputStream
@@ -581,7 +546,6 @@ class TerminalTabsWatcher(private val project: Project) {
                 }
             }
 
-            // Try reflection getOutputStream
             try {
                 val getOS = processObj.javaClass.getMethod("getOutputStream")
                 val os = getOS.invoke(processObj) as? java.io.OutputStream
@@ -603,7 +567,6 @@ class TerminalTabsWatcher(private val project: Project) {
         return null
     }
 
-    /** Try to use TerminalInput.bufferChannel.trySend for input. */
     @Suppress("UNCHECKED_CAST")
     private fun setupBufferChannelSender(terminalInput: Any, tabId: Int): ((String) -> Unit)? {
         val bufferChannel = try {
@@ -629,11 +592,9 @@ class TerminalTabsWatcher(private val project: Project) {
         LOG.info("RemoteClaude: [tab $tabId] input via bufferChannel.trySend(${trySendMethod.parameterTypes[0].simpleName})")
         return { text ->
             try {
-                val result = trySendMethod.invoke(bufferChannel, text)
-                LOG.info("RemoteClaude: [tab $tabId] bufferChannel.trySend result=$result")
+                trySendMethod.invoke(bufferChannel, text)
             } catch (e: Exception) {
                 LOG.warn("RemoteClaude: [tab $tabId] bufferChannel.trySend failed: ${e.cause?.message ?: e.message}")
-                // Try ByteArray as fallback
                 try {
                     trySendMethod.invoke(bufferChannel, text.toByteArray(Charsets.UTF_8))
                 } catch (e2: Exception) {
@@ -643,14 +604,12 @@ class TerminalTabsWatcher(private val project: Project) {
         }
     }
 
-    /** Dump diagnostics for the widget, outputModel, TerminalInput, TerminalSession. */
     private fun dumpWidgetDiagnostics(content: com.intellij.ui.content.Content, tabId: Int) {
         val widget = findObjectByClassName(content, "ReworkedTerminalWidget", maxDepth = 5)
         if (widget != null) {
             LOG.info("RemoteClaude: [tab $tabId] === Widget dump ===")
             logAllMembersOf(widget, "      widget")
 
-            // Get TerminalSession from widget
             try {
                 val getSession = widget.javaClass.methods.find { it.name == "getSession" && it.parameterCount == 0 }
                 val session = getSession?.invoke(widget)
@@ -671,12 +630,6 @@ class TerminalTabsWatcher(private val project: Project) {
             logAllMethodsWithParams(terminalInput, "      terminalInput")
         } else {
             LOG.info("RemoteClaude: [tab $tabId] TerminalInput NOT found in field graph")
-        }
-
-        val outputModel = findObjectByClassName(content, "OutputModel", maxDepth = 8)
-        if (outputModel != null) {
-            LOG.info("RemoteClaude: [tab $tabId] === OutputModel dump ===")
-            logAllMembersOf(outputModel, "      outputModel")
         }
     }
 
@@ -831,7 +784,6 @@ class TerminalTabsWatcher(private val project: Project) {
                     if (field.type == Class::class.java) continue
                     if (field.type.isArray) continue
 
-                    // Skip most basic JDK types, but allow Object (generics erase to Object)
                     val typeName = field.type.name
                     if (typeName.startsWith("java.lang.") && typeName != "java.lang.Object") continue
                     if (typeName.startsWith("java.util.") && !typeName.contains("concurrent")) continue
@@ -845,7 +797,6 @@ class TerminalTabsWatcher(private val project: Project) {
                         return value
                     }
 
-                    // For Object-typed fields, only recurse if the runtime type is interesting
                     if (typeName == "java.lang.Object") {
                         val valueCn = value.javaClass.name.lowercase()
                         if (!isTerminalRelatedClass(valueCn) && !valueCn.contains("concurrent")) continue
@@ -901,35 +852,10 @@ class TerminalTabsWatcher(private val project: Project) {
 
     // ── Diagnostics ────────────────────────────────────────────────────────
 
-    private fun dumpFieldTree(obj: Any, prefix: String, maxDepth: Int, visited: MutableSet<Int> = mutableSetOf()) {
-        if (maxDepth <= 0) return
-        val id = System.identityHashCode(obj)
-        if (!visited.add(id)) return
-
-        var clazz: Class<*>? = obj.javaClass
-        while (clazz != null && clazz != Any::class.java) {
-            for (field in clazz.declaredFields) {
-                try {
-                    if (field.type.isPrimitive) continue
-                    if (field.type == String::class.java) continue
-                    field.isAccessible = true
-                    val value = field.get(obj) ?: continue
-                    val cn = value.javaClass.name.lowercase()
-                    if (shouldFollowForSearch(cn)) {
-                        LOG.info("$prefix.${field.name}: ${value.javaClass.name}")
-                        dumpFieldTree(value, "$prefix.${field.name}", maxDepth - 1, visited)
-                    }
-                } catch (_: Exception) {}
-            }
-            clazz = clazz.superclass
-        }
-    }
-
     private fun logAllMembersOf(obj: Any, prefix: String) {
         val clazz = obj.javaClass
         LOG.info("$prefix class: ${clazz.name}")
 
-        // Fields (including values)
         var c: Class<*>? = clazz
         while (c != null && c != Any::class.java) {
             for (field in c.declaredFields) {
@@ -944,7 +870,6 @@ class TerminalTabsWatcher(private val project: Project) {
             c = c.superclass
         }
 
-        // Methods (no-arg, non-void)
         c = clazz
         while (c != null && c != Any::class.java) {
             for (method in c.declaredMethods) {
@@ -956,7 +881,6 @@ class TerminalTabsWatcher(private val project: Project) {
         }
     }
 
-    /** Dump ALL methods (including those with parameters) for comprehensive API discovery. */
     private fun logAllMethodsWithParams(obj: Any, prefix: String) {
         var c: Class<*>? = obj.javaClass
         while (c != null && c != Any::class.java) {
@@ -974,6 +898,111 @@ class TerminalTabsWatcher(private val project: Project) {
         return generateSequence(clazz) { it.superclass }
             .flatMap { cls -> cls.declaredMethods.asSequence() }
             .find { it.name == name && it.parameterCount == 0 }
+    }
+
+    fun createTerminal(projectPath: String, server: WsServer) {
+        com.intellij.openapi.application.ApplicationManager.getApplication().invokeLater {
+            try {
+                val toolWindow = ToolWindowManager.getInstance(project).getToolWindow("Terminal")
+                val countBefore = toolWindow?.contentManager?.contentCount ?: 0
+
+                // Show the Terminal tool window (may auto-create the first terminal)
+                toolWindow?.show()
+
+                val countAfter = toolWindow?.contentManager?.contentCount ?: 0
+                if (countBefore == 0 && countAfter > 0) {
+                    LOG.info("RemoteClaude: createTerminal — tool window auto-created a terminal on show(), skipping")
+                    return@invokeLater
+                }
+
+                // Approach 1: TerminalToolWindowManager.createNewSession() — creates reworked terminal
+                if (tryCreateViaToolWindowManager()) return@invokeLater
+
+                // Approach 2: IDE action — creates same terminal as the "+" button
+                if (tryCreateViaAction()) return@invokeLater
+
+                // Approach 3: Fallback to old API (creates old-style JBTerminalWidget)
+                LOG.warn("RemoteClaude: createTerminal fallback to old createLocalShellWidget API")
+                val tvClass = runCatching {
+                    Class.forName("com.intellij.terminal.TerminalView")
+                }.getOrElse {
+                    Class.forName("org.jetbrains.plugins.terminal.TerminalView")
+                }
+                val getInstance = tvClass.getMethod("getInstance", Project::class.java)
+                val terminalView = getInstance.invoke(null, project)
+                val projectName = java.io.File(projectPath).name
+                val createWidget = tvClass.getMethod(
+                    "createLocalShellWidget", String::class.java, String::class.java
+                )
+                createWidget.invoke(terminalView, projectPath, "bash: $projectName")
+            } catch (e: Exception) {
+                LOG.warn("RemoteClaude: createTerminal failed: ${e.message}")
+            }
+        }
+    }
+
+    private fun tryCreateViaToolWindowManager(): Boolean {
+        return try {
+            val tmwClass = Class.forName("org.jetbrains.plugins.terminal.TerminalToolWindowManager")
+            val getInstance = tmwClass.methods.find {
+                it.name == "getInstance" && it.parameterCount == 1
+                    && it.parameterTypes[0] == Project::class.java
+            } ?: return false
+            val manager = getInstance.invoke(null, project)
+
+            // Try createNewSession() (no-arg or nullable arg)
+            val createMethod = tmwClass.methods.find { m ->
+                m.name == "createNewSession" && (m.parameterCount == 0 ||
+                    (m.parameterCount == 1 && !m.parameterTypes[0].isPrimitive))
+            }
+            if (createMethod != null) {
+                if (createMethod.parameterCount == 0) {
+                    createMethod.invoke(manager)
+                } else {
+                    createMethod.invoke(manager, null)
+                }
+                LOG.info("RemoteClaude: createTerminal via TerminalToolWindowManager.${createMethod.name}()")
+                return true
+            }
+            false
+        } catch (e: Exception) {
+            LOG.info("RemoteClaude: TerminalToolWindowManager approach failed: ${e.message}")
+            false
+        }
+    }
+
+    private fun tryCreateViaAction(): Boolean {
+        val actionManager = com.intellij.openapi.actionSystem.ActionManager.getInstance()
+        val actionIds = listOf("Terminal.NewTab", "terminal.new.session")
+        for (id in actionIds) {
+            val action = actionManager.getAction(id) ?: continue
+            try {
+                val dataContext = com.intellij.openapi.actionSystem.impl.SimpleDataContext.builder()
+                    .add(com.intellij.openapi.actionSystem.CommonDataKeys.PROJECT, project)
+                    .build()
+                val event = com.intellij.openapi.actionSystem.AnActionEvent.createFromAnAction(
+                    action, null, "RemoteClaude", dataContext
+                )
+                action.actionPerformed(event)
+                LOG.info("RemoteClaude: createTerminal via action '$id'")
+                return true
+            } catch (e: Exception) {
+                LOG.info("RemoteClaude: action '$id' failed: ${e.message}")
+            }
+        }
+        return false
+    }
+
+    fun closeTab(tabId: Int) {
+        LOG.info("RemoteClaude: closeTab tabId=$tabId")
+        val content = tabContents[tabId] ?: run {
+            LOG.warn("RemoteClaude: closeTab - no content found for tabId=$tabId")
+            return
+        }
+        com.intellij.openapi.application.ApplicationManager.getApplication().invokeLater {
+            val toolWindow = ToolWindowManager.getInstance(project).getToolWindow("Terminal") ?: return@invokeLater
+            toolWindow.contentManager.removeContent(content, true)
+        }
     }
 
     fun sendInput(tabId: Int, data: String) {
@@ -1021,18 +1050,10 @@ class TerminalTabsWatcher(private val project: Project) {
         }
     }
 
-    /**
-     * Aggressive TtyConnector search from multiple roots:
-     * 1. content.component (AWT tree)
-     * 2. Widget object → session → deep search
-     * 3. TtyConnectorAccessor → future (might be completed by now)
-     * 4. Content object itself (field graph)
-     */
     private fun lazyFindConnector(
         content: com.intellij.ui.content.Content,
         tabId: Int,
     ): com.jediterm.terminal.TtyConnector? {
-        // Root 1: AWT component tree
         val component = content.component
         if (component != null) {
             val c = findTtyConnectorByMethod(component)
@@ -1043,23 +1064,19 @@ class TerminalTabsWatcher(private val project: Project) {
             }
         }
 
-        // Root 2: Widget → Session → deep search
         val widget = findObjectByClassName(content, "TerminalWidget", maxDepth = 5)
             ?: findObjectByClassName(content, "ReworkedTerminalWidget", maxDepth = 5)
         if (widget != null) {
-            LOG.info("RemoteClaude: [tab $tabId] lazy: searching from widget (${widget.javaClass.name})")
             val c = findTtyConnectorInAllFields(widget, maxDepth = 8)
             if (c != null && c.isConnected) {
                 LOG.info("RemoteClaude: [tab $tabId] lazy: found via widget fields")
                 return c
             }
 
-            // Try widget.getSession() → search session
             try {
                 val getSession = widget.javaClass.methods.find { it.name == "getSession" && it.parameterCount == 0 }
                 val session = getSession?.let { m -> m.isAccessible = true; m.invoke(widget) }
                 if (session != null) {
-                    LOG.info("RemoteClaude: [tab $tabId] lazy: searching from session (${session.javaClass.name})")
                     val sc = findTtyConnectorInAllFields(session, maxDepth = 8)
                     if (sc != null && sc.isConnected) {
                         LOG.info("RemoteClaude: [tab $tabId] lazy: found via session fields")
@@ -1071,11 +1088,9 @@ class TerminalTabsWatcher(private val project: Project) {
             }
         }
 
-        // Root 3: TtyConnectorAccessor — future might be completed by now
         val accessor = findObjectByClassName(content, "TtyConnectorAccessor", maxDepth = 8)
         if (accessor != null) {
             val future = extractCompletableFuture(accessor, "ttyConnectorFuture")
-            LOG.info("RemoteClaude: [tab $tabId] lazy: accessor future isDone=${future?.isDone}, isCancelled=${future?.isCancelled}")
             if (future != null && future.isDone && !future.isCancelled) {
                 try {
                     val result = future.getNow(null)
@@ -1085,7 +1100,6 @@ class TerminalTabsWatcher(private val project: Project) {
                     }
                 } catch (_: Exception) {}
             }
-            // Also search accessor's field graph
             val ac = findTtyConnectorInAllFields(accessor, maxDepth = 6)
             if (ac != null && ac.isConnected) {
                 LOG.info("RemoteClaude: [tab $tabId] lazy: found via accessor fields")
@@ -1093,7 +1107,6 @@ class TerminalTabsWatcher(private val project: Project) {
             }
         }
 
-        // Root 4: Content object itself
         val cc = findTtyConnectorInAllFields(content, maxDepth = 8)
         if (cc != null && cc.isConnected) {
             LOG.info("RemoteClaude: [tab $tabId] lazy: found via content fields")

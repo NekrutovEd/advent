@@ -4,8 +4,8 @@ import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.Json
 
-// Shared WebSocket protocol between plugin (server) and Android app (client).
-// Both sides use identical message types serialized as JSON with a "type" discriminator.
+// WebSocket protocol for plugin <-> central server communication.
+// Plugin sends Plugin* messages to server, receives Forward* messages back.
 
 val wsJson = Json {
     classDiscriminator = "type"
@@ -16,116 +16,175 @@ val wsJson = Json {
 @Serializable
 sealed class WsMessage
 
-// ─── Server → Client ──────────────────────────────────────────────────────────
+// ─── Plugin → Server ─────────────────────────────────────────────────────────
 
-/** Sent on connect: full list of current terminal tabs */
+/** Register this plugin with the server */
 @Serializable
-@SerialName("init")
-data class InitMessage(val tabs: List<TabInfo>) : WsMessage()
+@SerialName("register_plugin")
+data class RegisterPluginMessage(
+    val pluginId: String,
+    val ideName: String,
+    val projectName: String,
+    val hostname: String,
+) : WsMessage()
 
-/** Realtime terminal output chunk (ANSI-encoded) */
+/** Send full tab list to server */
 @Serializable
-@SerialName("output")
-data class OutputMessage(val tabId: Int, val data: String) : WsMessage()
+@SerialName("plugin_tabs")
+data class PluginTabsMessage(
+    val pluginId: String,
+    val tabs: List<TabInfo>,
+) : WsMessage()
 
-/** Tab state changed (e.g. started waiting for input) */
+/** Send terminal output to server */
 @Serializable
-@SerialName("tab_state")
-data class TabStateMessage(
-    val tabId: Int,
+@SerialName("plugin_output")
+data class PluginOutputMessage(
+    val pluginId: String,
+    val localTabId: Int,
+    val data: String,
+) : WsMessage()
+
+/** Report tab state change to server */
+@Serializable
+@SerialName("plugin_tab_state")
+data class PluginTabStateMessage(
+    val pluginId: String,
+    val localTabId: Int,
     val state: TabState,
     val message: String? = null,
 ) : WsMessage()
 
-/** A new terminal tab was opened */
+/** Report new tab opened */
 @Serializable
-@SerialName("tab_added")
-data class TabAddedMessage(val tab: TabInfo) : WsMessage()
+@SerialName("plugin_tab_added")
+data class PluginTabAddedMessage(
+    val pluginId: String,
+    val tab: TabInfo,
+) : WsMessage()
 
-/** A terminal tab was closed */
+/** Report tab closed */
 @Serializable
-@SerialName("tab_removed")
-data class TabRemovedMessage(val tabId: Int) : WsMessage()
+@SerialName("plugin_tab_removed")
+data class PluginTabRemovedMessage(
+    val pluginId: String,
+    val localTabId: Int,
+) : WsMessage()
 
-/** Scrollback buffer response for a tab */
+/** Send scrollback buffer response */
 @Serializable
-@SerialName("buffer")
-data class BufferMessage(val tabId: Int, val data: String) : WsMessage()
+@SerialName("plugin_buffer")
+data class PluginBufferMessage(
+    val pluginId: String,
+    val localTabId: Int,
+    val data: String,
+) : WsMessage()
 
-/** Response to list_projects request */
+/** Send projects list */
 @Serializable
-@SerialName("projects_list")
-data class ProjectsListMessage(val projects: List<ProjectInfo>) : WsMessage()
+@SerialName("plugin_projects_list")
+data class PluginProjectsListMessage(
+    val pluginId: String,
+    val projects: List<ProjectInfo>,
+) : WsMessage()
 
-/** Confirms an agent was launched */
+/** Confirm agent launched */
 @Serializable
-@SerialName("agent_launched")
-data class AgentLaunchedMessage(
-    val tabId: Int,
+@SerialName("plugin_agent_launched")
+data class PluginAgentLaunchedMessage(
+    val pluginId: String,
+    val localTabId: Int,
     val projectPath: String,
     val mode: AgentMode,
 ) : WsMessage()
 
-/** Output chunk from a batch agent */
+/** Send agent output */
 @Serializable
-@SerialName("agent_output")
-data class AgentOutputMessage(
-    val tabId: Int,
+@SerialName("plugin_agent_output")
+data class PluginAgentOutputMessage(
+    val pluginId: String,
+    val localTabId: Int,
     val data: String,
     val isJson: Boolean = false,
 ) : WsMessage()
 
-/** Batch agent finished */
+/** Report agent completed */
 @Serializable
-@SerialName("agent_completed")
-data class AgentCompletedMessage(
-    val tabId: Int,
+@SerialName("plugin_agent_completed")
+data class PluginAgentCompletedMessage(
+    val pluginId: String,
+    val localTabId: Int,
     val exitCode: Int,
 ) : WsMessage()
 
-/** Error notification */
-@Serializable
-@SerialName("error")
-data class ErrorMessage(val message: String) : WsMessage()
+// ─── Server → Plugin (Forwarded commands) ────────────────────────────────────
 
-// ─── Client → Server ──────────────────────────────────────────────────────────
-
-/** Send text input to a terminal tab */
+/** Server confirms registration */
 @Serializable
-@SerialName("input")
-data class InputMessage(val tabId: Int, val data: String) : WsMessage()
+@SerialName("plugin_registered")
+data class PluginRegisteredMessage(
+    val pluginId: String,
+) : WsMessage()
 
-/** Request scrollback buffer for a tab */
+/** Server forwards input from app */
 @Serializable
-@SerialName("request_buffer")
-data class RequestBufferMessage(val tabId: Int) : WsMessage()
+@SerialName("forward_input")
+data class ForwardInputMessage(
+    val localTabId: Int,
+    val data: String,
+) : WsMessage()
 
-/** Request list of configured projects */
+/** Server requests scrollback buffer */
 @Serializable
-@SerialName("list_projects")
-class ListProjectsMessage : WsMessage()
+@SerialName("forward_request_buffer")
+data class ForwardRequestBufferMessage(
+    val localTabId: Int,
+) : WsMessage()
 
-/** Launch a new Claude Code agent */
+/** Server requests agent launch */
 @Serializable
-@SerialName("launch_agent")
-data class LaunchAgentMessage(
+@SerialName("forward_launch_agent")
+data class ForwardLaunchAgentMessage(
     val projectPath: String,
     val mode: AgentMode,
     val prompt: String,
     val allowedTools: List<String> = emptyList(),
 ) : WsMessage()
 
-/** Terminate a running agent */
+/** Server requests tab close */
 @Serializable
-@SerialName("terminate_agent")
-data class TerminateAgentMessage(val tabId: Int) : WsMessage()
+@SerialName("forward_close_tab")
+data class ForwardCloseTabMessage(
+    val localTabId: Int,
+) : WsMessage()
 
-/** Add a project path to the registry */
+/** Server requests terminal creation */
 @Serializable
-@SerialName("add_project")
-data class AddProjectMessage(val path: String) : WsMessage()
+@SerialName("forward_create_terminal")
+data class ForwardCreateTerminalMessage(
+    val projectPath: String,
+) : WsMessage()
 
-// ─── Shared data classes ──────────────────────────────────────────────────────
+/** Server requests agent termination */
+@Serializable
+@SerialName("forward_terminate_agent")
+data class ForwardTerminateAgentMessage(
+    val localTabId: Int,
+) : WsMessage()
+
+/** Server requests projects list */
+@Serializable
+@SerialName("forward_list_projects")
+class ForwardListProjectsMessage : WsMessage()
+
+/** Server requests adding a project */
+@Serializable
+@SerialName("forward_add_project")
+data class ForwardAddProjectMessage(
+    val path: String,
+) : WsMessage()
+
+// ─── Shared data classes ─────────────────────────────────────────────────────
 
 @Serializable
 data class TabInfo(

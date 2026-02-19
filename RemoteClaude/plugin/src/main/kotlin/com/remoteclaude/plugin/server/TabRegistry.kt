@@ -8,6 +8,7 @@ class TabRegistry {
     private val idGen = AtomicInteger(1)
     private val tabs = ConcurrentHashMap<Int, TabInfo>()
     private val buffers = ConcurrentHashMap<Int, TabBuffer>()
+    private val lastOutputTime = ConcurrentHashMap<Int, Long>()
 
     fun registerTab(title: String, projectPath: String?): TabInfo {
         val id = idGen.getAndIncrement()
@@ -24,9 +25,21 @@ class TabRegistry {
         return updated
     }
 
+    fun touchOutput(tabId: Int) {
+        lastOutputTime[tabId] = System.currentTimeMillis()
+    }
+
+    /** Find the tab with the most recent output activity */
+    fun findMostRecentlyActiveTab(): Int? {
+        return lastOutputTime.entries
+            .maxByOrNull { it.value }
+            ?.key
+    }
+
     fun removeTab(tabId: Int) {
         tabs.remove(tabId)
         buffers.remove(tabId)
+        lastOutputTime.remove(tabId)
     }
 
     fun removeTabByTitle(title: String): Int? {

@@ -12,8 +12,7 @@ import kotlinx.coroutines.runBlocking
 class NotificationActionReceiver : BroadcastReceiver() {
     override fun onReceive(context: Context, intent: Intent) {
         if (intent.action != RcNotificationManager.ACTION_SEND_INPUT) return
-        val tabId = intent.getIntExtra(RcNotificationManager.EXTRA_TAB_ID, -1)
-        if (tabId < 0) return
+        val tabId = intent.getStringExtra(RcNotificationManager.EXTRA_TAB_ID) ?: return
 
         // Get input from inline reply or from extra
         val text = RemoteInput.getResultsFromIntent(intent)
@@ -28,6 +27,6 @@ class NotificationActionReceiver : BroadcastReceiver() {
         }
 
         NotificationManagerCompat.from(context)
-            .cancel(RemoteClaudeApplication.NOTIF_ID_ALERT_BASE + tabId)
+            .cancel(RemoteClaudeApplication.NOTIF_ID_ALERT_BASE + (tabId.hashCode() and 0x7FFFFFFF))
     }
 }

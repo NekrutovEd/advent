@@ -7,6 +7,8 @@ import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Close
 import androidx.compose.material3.*
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
@@ -22,8 +24,9 @@ import com.remoteclaude.app.data.ws.TabState
 @Composable
 fun TabBar(
     tabs: List<TabInfo>,
-    activeTabId: Int?,
-    onTabClick: (Int) -> Unit,
+    activeTabId: String?,
+    onTabClick: (String) -> Unit,
+    onTabClose: (String) -> Unit,
     modifier: Modifier = Modifier,
 ) {
     Row(
@@ -37,6 +40,7 @@ fun TabBar(
                 tab = tab,
                 isActive = tab.id == activeTabId,
                 onClick = { onTabClick(tab.id) },
+                onClose = { onTabClose(tab.id) },
             )
         }
     }
@@ -47,29 +51,31 @@ private fun TabChip(
     tab: TabInfo,
     isActive: Boolean,
     onClick: () -> Unit,
+    onClose: () -> Unit,
 ) {
     val isWaiting = tab.state == TabState.WAITING_INPUT || tab.state == TabState.WAITING_TOOL
     val bgColor = if (isActive) MaterialTheme.colorScheme.primaryContainer
                   else MaterialTheme.colorScheme.surfaceVariant
+    val contentColor = if (isActive) MaterialTheme.colorScheme.onPrimaryContainer
+                       else MaterialTheme.colorScheme.onSurfaceVariant
 
     Box(
         modifier = Modifier
             .clip(RoundedCornerShape(16.dp))
             .background(bgColor)
             .clickable(onClick = onClick)
-            .padding(horizontal = 12.dp, vertical = 6.dp),
+            .padding(start = 12.dp, end = 4.dp, top = 2.dp, bottom = 2.dp),
     ) {
         Row(
             verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(6.dp),
+            horizontalArrangement = Arrangement.spacedBy(4.dp),
         ) {
             Text(
                 text = tab.title.take(20),
                 fontSize = 12.sp,
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis,
-                color = if (isActive) MaterialTheme.colorScheme.onPrimaryContainer
-                        else MaterialTheme.colorScheme.onSurfaceVariant,
+                color = contentColor,
             )
             if (isWaiting) {
                 Box(
@@ -77,6 +83,17 @@ private fun TabChip(
                         .size(8.dp)
                         .clip(CircleShape)
                         .background(Color(0xFFFF9800))
+                )
+            }
+            IconButton(
+                onClick = onClose,
+                modifier = Modifier.size(20.dp),
+            ) {
+                Icon(
+                    Icons.Default.Close,
+                    contentDescription = "Close tab",
+                    modifier = Modifier.size(14.dp),
+                    tint = contentColor,
                 )
             }
         }

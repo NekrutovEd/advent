@@ -9,6 +9,7 @@ import com.remoteclaude.app.data.mdns.MdnsDiscovery
 import com.remoteclaude.app.data.mdns.UdpBroadcastDiscovery
 import com.remoteclaude.app.data.net.WifiNetworkProvider
 import com.remoteclaude.app.data.ws.WsClient
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.*
 import kotlinx.coroutines.launch
 
@@ -33,9 +34,11 @@ class ConnectViewModel(application: Application) : AndroidViewModel(application)
     private val _error = MutableStateFlow<String?>(null)
     val error: StateFlow<String?> = _error
 
+    private var connectJob: Job? = null
+
     init {
         Log.d(TAG, "ConnectVM: init, wifiNetwork=$wifiNetwork")
-        mdns.startDiscovery()
+        mdns.startDiscovery(viewModelScope)
         udp.start(viewModelScope)
         viewModelScope.launch {
             wsClient.connectionState.collect { state ->
@@ -49,6 +52,9 @@ class ConnectViewModel(application: Application) : AndroidViewModel(application)
                         Log.e(TAG, "ConnectVM: Error: ${state.message}")
                         _error.value = state.message
                     }
+                    is WsClient.ConnectionState.Reconnecting -> {
+                        Log.d(TAG, "ConnectVM: Reconnecting attempt=${state.attempt}")
+                    }
                     else -> {}
                 }
             }
@@ -60,9 +66,16 @@ class ConnectViewModel(application: Application) : AndroidViewModel(application)
     fun connect(host: String, port: Int) {
         Log.d(TAG, "ConnectVM: connect($host, $port)")
         _error.value = null
-        viewModelScope.launch {
-            wsClient.connect(host, port)
+        connectJob?.cancel()
+        connectJob = viewModelScope.launch {
+            wsClient.connectWithRetry(host, port)
         }
+    }
+
+    fun cancelReconnect() {
+        Log.d(TAG, "ConnectVM: cancelReconnect()")
+        connectJob?.cancel()
+        connectJob = null
     }
 
     override fun onCleared() {

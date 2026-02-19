@@ -4,8 +4,8 @@ import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.Json
 
-// Shared WebSocket protocol — mirror of plugin/server/WsProtocol.kt
-// Keep both files in sync when adding new message types.
+// WebSocket protocol — mirror of server's App-facing messages.
+// Tab IDs are global Strings (format: "pluginId:localTabId").
 
 val wsJson = Json {
     classDiscriminator = "type"
@@ -16,20 +16,23 @@ val wsJson = Json {
 @Serializable
 sealed class WsMessage
 
-// ─── Server → Client ──────────────────────────────────────────────────────────
+// ─── Server → App ────────────────────────────────────────────────────────────
 
 @Serializable
 @SerialName("init")
-data class InitMessage(val tabs: List<TabInfo>) : WsMessage()
+data class InitMessage(
+    val tabs: List<TabInfo>,
+    val plugins: List<PluginInfo> = emptyList(),
+) : WsMessage()
 
 @Serializable
 @SerialName("output")
-data class OutputMessage(val tabId: Int, val data: String) : WsMessage()
+data class OutputMessage(val tabId: String, val data: String) : WsMessage()
 
 @Serializable
 @SerialName("tab_state")
 data class TabStateMessage(
-    val tabId: Int,
+    val tabId: String,
     val state: TabState,
     val message: String? = null,
 ) : WsMessage()
@@ -40,11 +43,11 @@ data class TabAddedMessage(val tab: TabInfo) : WsMessage()
 
 @Serializable
 @SerialName("tab_removed")
-data class TabRemovedMessage(val tabId: Int) : WsMessage()
+data class TabRemovedMessage(val tabId: String) : WsMessage()
 
 @Serializable
 @SerialName("buffer")
-data class BufferMessage(val tabId: Int, val data: String) : WsMessage()
+data class BufferMessage(val tabId: String, val data: String) : WsMessage()
 
 @Serializable
 @SerialName("projects_list")
@@ -53,7 +56,7 @@ data class ProjectsListMessage(val projects: List<ProjectInfo>) : WsMessage()
 @Serializable
 @SerialName("agent_launched")
 data class AgentLaunchedMessage(
-    val tabId: Int,
+    val tabId: String,
     val projectPath: String,
     val mode: AgentMode,
 ) : WsMessage()
@@ -61,7 +64,7 @@ data class AgentLaunchedMessage(
 @Serializable
 @SerialName("agent_output")
 data class AgentOutputMessage(
-    val tabId: Int,
+    val tabId: String,
     val data: String,
     val isJson: Boolean = false,
 ) : WsMessage()
@@ -69,7 +72,7 @@ data class AgentOutputMessage(
 @Serializable
 @SerialName("agent_completed")
 data class AgentCompletedMessage(
-    val tabId: Int,
+    val tabId: String,
     val exitCode: Int,
 ) : WsMessage()
 
@@ -77,15 +80,23 @@ data class AgentCompletedMessage(
 @SerialName("error")
 data class ErrorMessage(val message: String) : WsMessage()
 
-// ─── Client → Server ──────────────────────────────────────────────────────────
+// ─── App → Server ────────────────────────────────────────────────────────────
+
+/** Register this app with the server */
+@Serializable
+@SerialName("register_app")
+data class RegisterAppMessage(
+    val deviceName: String,
+    val platform: String,
+) : WsMessage()
 
 @Serializable
 @SerialName("input")
-data class InputMessage(val tabId: Int, val data: String) : WsMessage()
+data class InputMessage(val tabId: String, val data: String) : WsMessage()
 
 @Serializable
 @SerialName("request_buffer")
-data class RequestBufferMessage(val tabId: Int) : WsMessage()
+data class RequestBufferMessage(val tabId: String) : WsMessage()
 
 @Serializable
 @SerialName("list_projects")
@@ -102,20 +113,39 @@ data class LaunchAgentMessage(
 
 @Serializable
 @SerialName("terminate_agent")
-data class TerminateAgentMessage(val tabId: Int) : WsMessage()
+data class TerminateAgentMessage(val tabId: String) : WsMessage()
 
 @Serializable
 @SerialName("add_project")
 data class AddProjectMessage(val path: String) : WsMessage()
 
-// ─── Shared data classes ──────────────────────────────────────────────────────
+@Serializable
+@SerialName("close_tab")
+data class CloseTabMessage(val tabId: String) : WsMessage()
+
+@Serializable
+@SerialName("create_terminal")
+data class CreateTerminalMessage(val projectPath: String) : WsMessage()
+
+// ─── Shared data classes ─────────────────────────────────────────────────────
 
 @Serializable
 data class TabInfo(
-    val id: Int,
+    val id: String,
     val title: String,
     val state: TabState,
+    val pluginId: String = "",
+    val pluginName: String = "",
     val projectPath: String? = null,
+)
+
+@Serializable
+data class PluginInfo(
+    val pluginId: String,
+    val ideName: String,
+    val projectName: String,
+    val hostname: String,
+    val tabCount: Int = 0,
 )
 
 @Serializable

@@ -12,30 +12,25 @@ import java.util.concurrent.ConcurrentHashMap
 class AgentLauncher(private val project: Project) {
 
     private val batchProcesses = ConcurrentHashMap<Int, Process>()
+    private val scope = CoroutineScope(Dispatchers.IO + SupervisorJob())
 
     fun launch(
-        message: LaunchAgentMessage,
-        scope: CoroutineScope,
+        message: ForwardLaunchAgentMessage,
+        pluginClient: WsPluginClient,
         registry: TabRegistry,
-        sessionManager: WsSessionManager,
     ) {
         when (message.mode) {
-            AgentMode.INTERACTIVE -> launchInteractive(message, scope, registry, sessionManager)
-            AgentMode.BATCH -> launchBatch(message, scope, registry, sessionManager)
+            AgentMode.INTERACTIVE -> launchInteractive(message, pluginClient)
+            AgentMode.BATCH -> launchBatch(message, pluginClient, registry)
         }
     }
 
     private fun launchInteractive(
-        message: LaunchAgentMessage,
-        scope: CoroutineScope,
-        registry: TabRegistry,
-        sessionManager: WsSessionManager,
+        message: ForwardLaunchAgentMessage,
+        pluginClient: WsPluginClient,
     ) {
         ApplicationManager.getApplication().invokeLater {
             try {
-                // Access TerminalView via reflection to avoid hard compile-time dependency.
-                // The class may be at com.intellij.terminal.TerminalView or
-                // org.jetbrains.plugins.terminal.TerminalView depending on IDE version.
                 val tvClass = runCatching {
                     Class.forName("com.intellij.terminal.TerminalView")
                 }.getOrElse {
@@ -56,26 +51,25 @@ class AgentLauncher(private val project: Project) {
                     executeCmd.invoke(widget, cmd)
                 }
             } catch (e: Exception) {
-                scope.launch {
-                    sessionManager.broadcast(ErrorMessage("Failed to open terminal: ${e.message}"))
-                }
+                pluginClient.sendFireAndForget(
+                    PluginAgentCompletedMessage(pluginClient.pluginId, 0, 1)
+                )
             }
         }
     }
 
     private fun launchBatch(
-        message: LaunchAgentMessage,
-        scope: CoroutineScope,
+        message: ForwardLaunchAgentMessage,
+        pluginClient: WsPluginClient,
         registry: TabRegistry,
-        sessionManager: WsSessionManager,
     ) {
-        scope.launch(Dispatchers.IO) {
+        scope.launch {
             val tabInfo = registry.registerTab(
                 "batch: ${File(message.projectPath).name}",
                 message.projectPath
             )
-            sessionManager.broadcast(
-                AgentLaunchedMessage(tabInfo.id, message.projectPath, AgentMode.BATCH)
+            pluginClient.send(
+                PluginAgentLaunchedMessage(pluginClient.pluginId, tabInfo.id, message.projectPath, AgentMode.BATCH)
             )
 
             val cmd = buildList {
@@ -101,7 +95,9 @@ class AgentLauncher(private val project: Project) {
                 process.inputStream.bufferedReader().forEachLine { line ->
                     registry.getBuffer(tabInfo.id)?.append(line + "\n")
                     runBlocking {
-                        sessionManager.broadcast(AgentOutputMessage(tabInfo.id, line, isJson = true))
+                        pluginClient.send(
+                            PluginAgentOutputMessage(pluginClient.pluginId, tabInfo.id, line, isJson = true)
+                        )
                     }
                 }
 
@@ -109,11 +105,15 @@ class AgentLauncher(private val project: Project) {
                 batchProcesses.remove(tabInfo.id)
                 val finalState = if (exitCode == 0) TabState.COMPLETED else TabState.FAILED
                 registry.updateTabState(tabInfo.id, finalState)
-                sessionManager.broadcast(AgentCompletedMessage(tabInfo.id, exitCode))
+                pluginClient.send(
+                    PluginAgentCompletedMessage(pluginClient.pluginId, tabInfo.id, exitCode)
+                )
             } catch (e: Exception) {
                 batchProcesses.remove(tabInfo.id)
                 registry.updateTabState(tabInfo.id, TabState.FAILED)
-                sessionManager.broadcast(ErrorMessage("Batch agent failed: ${e.message}"))
+                pluginClient.sendFireAndForget(
+                    PluginAgentCompletedMessage(pluginClient.pluginId, tabInfo.id, 1)
+                )
             }
         }
     }
@@ -128,7 +128,7 @@ class AgentLauncher(private val project: Project) {
             project.getService(AgentLauncher::class.java)
     }
 
-    private fun buildClaudeCommand(message: LaunchAgentMessage): String {
+    private fun buildClaudeCommand(message: ForwardLaunchAgentMessage): String {
         val parts = mutableListOf("claude")
         if (message.allowedTools.isNotEmpty()) {
             parts.add("--allowedTools ${message.allowedTools.joinToString(",")}")

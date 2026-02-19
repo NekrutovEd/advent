@@ -12,9 +12,10 @@ private const val TAG = "RC_DEBUG"
 
 data class TerminalUiState(
     val tabs: List<TabInfo> = emptyList(),
-    val activeTabId: Int? = null,
+    val activeTabId: String? = null,
     val projects: List<ProjectInfo> = emptyList(),
-    val isConnected: Boolean = true,
+    val plugins: List<PluginInfo> = emptyList(),
+    val selectedPluginId: String? = null,
 )
 
 class TerminalViewModel(private val wsClient: WsClient) : ViewModel() {
@@ -22,13 +23,15 @@ class TerminalViewModel(private val wsClient: WsClient) : ViewModel() {
     private val _uiState = MutableStateFlow(TerminalUiState())
     val uiState: StateFlow<TerminalUiState> = _uiState
 
-    // Buffer per tab: tabId -> StringBuilder
-    private val buffers = ConcurrentHashMap<Int, StringBuilder>()
+    val connectionState: StateFlow<WsClient.ConnectionState> = wsClient.connectionState
+
+    // Buffer per tab: tabId (String) -> StringBuilder
+    private val buffers = ConcurrentHashMap<String, StringBuilder>()
 
     // Output flow per tab (for TerminalView to collect)
-    private val outputFlows = ConcurrentHashMap<Int, MutableSharedFlow<String>>()
+    private val outputFlows = ConcurrentHashMap<String, MutableSharedFlow<String>>()
 
-    fun outputFlow(tabId: Int): SharedFlow<String> =
+    fun outputFlow(tabId: String): SharedFlow<String> =
         outputFlows.getOrPut(tabId) { MutableSharedFlow(extraBufferCapacity = 256) }
 
     init {
@@ -40,15 +43,33 @@ class TerminalViewModel(private val wsClient: WsClient) : ViewModel() {
                 handleMessage(message)
             }
         }
+        // Register app with server
+        viewModelScope.launch {
+            wsClient.send(RegisterAppMessage(
+                deviceName = android.os.Build.MODEL,
+                platform = "android",
+            ))
+        }
         requestProjects()
     }
 
     private var pendingBareTerminal = false
 
     fun launchBareTerminal() {
-        val project = _uiState.value.projects.firstOrNull()
-        if (project != null) {
-            launchAgent(project.path, AgentMode.INTERACTIVE, "")
+        val state = _uiState.value
+        val selectedPlugin = state.plugins.find { it.pluginId == state.selectedPluginId }
+        // Resolve project path: try matching plugin's projectName with known projects,
+        // then try extracting from an existing tab of this plugin
+        val projectPath = selectedPlugin?.let { plugin ->
+            state.projects.find { it.name == plugin.projectName }?.path
+                ?: state.tabs.firstOrNull {
+                    it.pluginId == plugin.pluginId || it.id.substringBefore(":") == plugin.pluginId
+                }?.projectPath
+        } ?: state.projects.firstOrNull()?.path
+
+        if (projectPath != null) {
+            Log.d(TAG, "TerminalVM: launchBareTerminal for $projectPath (plugin=${selectedPlugin?.pluginId})")
+            viewModelScope.launch { wsClient.send(CreateTerminalMessage(projectPath)) }
         } else {
             Log.w(TAG, "TerminalVM: launchBareTerminal - no projects yet, requesting and queuing launch")
             pendingBareTerminal = true
@@ -59,24 +80,52 @@ class TerminalViewModel(private val wsClient: WsClient) : ViewModel() {
     private suspend fun handleMessage(message: WsMessage) {
         when (message) {
             is InitMessage -> {
-                Log.d(TAG, "TerminalVM: InitMessage tabs=${message.tabs.map { "id=${it.id},title=${it.title},state=${it.state}" }}")
-                _uiState.update { it.copy(tabs = message.tabs, activeTabId = message.tabs.firstOrNull()?.id) }
-                Log.d(TAG, "TerminalVM: after init, activeTabId=${_uiState.value.activeTabId}")
+                Log.d(TAG, "TerminalVM: InitMessage tabs=${message.tabs.map { "id=${it.id},title=${it.title},state=${it.state}" }}, plugins=${message.plugins.size}")
+                val firstPlugin = message.plugins.firstOrNull()?.pluginId
+                val firstTab = if (firstPlugin != null) {
+                    message.tabs.firstOrNull { it.pluginId == firstPlugin || it.id.substringBefore(":") == firstPlugin }
+                } else {
+                    message.tabs.firstOrNull()
+                }
+                _uiState.update { it.copy(
+                    tabs = message.tabs,
+                    activeTabId = firstTab?.id ?: message.tabs.firstOrNull()?.id,
+                    plugins = message.plugins,
+                    selectedPluginId = firstPlugin,
+                ) }
+                Log.d(TAG, "TerminalVM: after init, activeTabId=${_uiState.value.activeTabId}, selectedPluginId=$firstPlugin")
             }
             is TabAddedMessage -> {
                 Log.d(TAG, "TerminalVM: TabAddedMessage tab.id=${message.tab.id}, title=${message.tab.title}")
-                _uiState.update { it.copy(tabs = it.tabs + message.tab) }
-                if (_uiState.value.activeTabId == null) {
-                    _uiState.update { it.copy(activeTabId = message.tab.id) }
+                _uiState.update { state ->
+                    val newTabs = state.tabs + message.tab
+                    val tabPid = message.tab.pluginId.ifEmpty { message.tab.id.substringBefore(":") }
+                    val isForSelectedPlugin = state.selectedPluginId == null || tabPid == state.selectedPluginId
+                    // Auto-activate if: no active tab, or active tab is from another plugin (empty state visible)
+                    val activeTabInSelectedPlugin = state.activeTabId != null && state.selectedPluginId?.let { pid ->
+                        state.tabs.any { it.id == state.activeTabId && (it.pluginId == pid || it.id.substringBefore(":") == pid) }
+                    } ?: (state.activeTabId != null)
+                    val shouldActivate = isForSelectedPlugin && !activeTabInSelectedPlugin
+                    state.copy(
+                        tabs = newTabs,
+                        activeTabId = if (shouldActivate) message.tab.id else state.activeTabId,
+                    )
                 }
             }
             is TabRemovedMessage -> {
                 Log.d(TAG, "TerminalVM: TabRemovedMessage tabId=${message.tabId}")
                 _uiState.update { state ->
                     val newTabs = state.tabs.filter { it.id != message.tabId }
+                    val selectedPid = state.selectedPluginId
+                    // Pick next tab within the same plugin, or null (empty state)
+                    val newActiveTabId = if (state.activeTabId == message.tabId) {
+                        newTabs.firstOrNull {
+                            selectedPid != null && (it.pluginId == selectedPid || it.id.substringBefore(":") == selectedPid)
+                        }?.id
+                    } else state.activeTabId
                     state.copy(
                         tabs = newTabs,
-                        activeTabId = if (state.activeTabId == message.tabId) newTabs.firstOrNull()?.id else state.activeTabId
+                        activeTabId = newActiveTabId,
                     )
                 }
                 buffers.remove(message.tabId)
@@ -122,7 +171,7 @@ class TerminalViewModel(private val wsClient: WsClient) : ViewModel() {
                     if (project != null) {
                         Log.d(TAG, "TerminalVM: executing pending bare terminal launch for ${project.path}")
                         viewModelScope.launch {
-                            wsClient.send(LaunchAgentMessage(project.path, AgentMode.INTERACTIVE, "", emptyList()))
+                            wsClient.send(CreateTerminalMessage(project.path))
                         }
                     } else {
                         Log.w(TAG, "TerminalVM: pending bare terminal but projects list is still empty")
@@ -131,10 +180,14 @@ class TerminalViewModel(private val wsClient: WsClient) : ViewModel() {
             }
             is AgentLaunchedMessage -> {
                 Log.d(TAG, "TerminalVM: AgentLaunchedMessage tabId=${message.tabId}, project=${message.projectPath}")
+                val extractedPluginId = message.tabId.substringBefore(":")
+                val plugin = _uiState.value.plugins.find { it.pluginId == extractedPluginId }
                 val newTab = TabInfo(
                     id = message.tabId,
                     title = "claude: ${message.projectPath.split("/").last()}",
                     state = TabState.STARTING,
+                    pluginId = extractedPluginId,
+                    pluginName = plugin?.projectName ?: extractedPluginId,
                     projectPath = message.projectPath,
                 )
                 _uiState.update { it.copy(tabs = it.tabs + newTab, activeTabId = message.tabId) }
@@ -159,7 +212,20 @@ class TerminalViewModel(private val wsClient: WsClient) : ViewModel() {
         }
     }
 
-    fun switchTab(tabId: Int) {
+    fun selectPlugin(pluginId: String) {
+        Log.d(TAG, "TerminalVM: selectPlugin($pluginId)")
+        _uiState.update { state ->
+            val firstTab = state.tabs.firstOrNull {
+                it.pluginId == pluginId || it.id.substringBefore(":") == pluginId
+            }
+            state.copy(
+                selectedPluginId = pluginId,
+                activeTabId = firstTab?.id,
+            )
+        }
+    }
+
+    fun switchTab(tabId: String) {
         Log.d(TAG, "TerminalVM: switchTab($tabId), hasBuffer=${buffers[tabId] != null}")
         _uiState.update { it.copy(activeTabId = tabId) }
         if (buffers[tabId] == null) {
@@ -168,12 +234,12 @@ class TerminalViewModel(private val wsClient: WsClient) : ViewModel() {
         }
     }
 
-    fun sendInput(tabId: Int, text: String) {
+    fun sendInput(tabId: String, text: String) {
         Log.d(TAG, "TerminalVM: sendInput tabId=$tabId, text=\"$text\"")
         viewModelScope.launch { wsClient.send(InputMessage(tabId, "$text\r")) }
     }
 
-    fun sendRawInput(tabId: Int, data: String) {
+    fun sendRawInput(tabId: String, data: String) {
         Log.d(TAG, "TerminalVM: sendRawInput tabId=$tabId, dataLen=${data.length}, data=${data.take(80)}")
         viewModelScope.launch { wsClient.send(InputMessage(tabId, data)) }
     }
@@ -190,12 +256,17 @@ class TerminalViewModel(private val wsClient: WsClient) : ViewModel() {
         }
     }
 
-    fun terminateAgent(tabId: Int) {
+    fun closeTab(tabId: String) {
+        Log.d(TAG, "TerminalVM: closeTab tabId=$tabId")
+        viewModelScope.launch { wsClient.send(CloseTabMessage(tabId)) }
+    }
+
+    fun terminateAgent(tabId: String) {
         Log.d(TAG, "TerminalVM: terminateAgent tabId=$tabId")
         viewModelScope.launch { wsClient.send(TerminateAgentMessage(tabId)) }
     }
 
-    fun getBuffer(tabId: Int): String {
+    fun getBuffer(tabId: String): String {
         val buf = buffers[tabId]?.toString() ?: ""
         Log.d(TAG, "TerminalVM: getBuffer($tabId) len=${buf.length}")
         return buf

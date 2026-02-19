@@ -16,21 +16,22 @@ object RcNotificationManager {
     const val EXTRA_INPUT = "input"
     const val KEY_REPLY = "reply_text"
 
-    fun buildWaitingNotification(ctx: Context, tabId: Int, message: String?): Notification {
+    fun buildWaitingNotification(ctx: Context, tabId: String, message: String?): Notification {
+        val reqBase = tabId.hashCode() and 0x7FFFFFFF
         val openIntent = PendingIntent.getActivity(
-            ctx, tabId,
+            ctx, reqBase,
             Intent(ctx, MainActivity::class.java),
             PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT,
         )
 
-        val yesIntent = actionIntent(ctx, tabId, "y\n", tabId * 10 + 1)
-        val noIntent = actionIntent(ctx, tabId, "n\n", tabId * 10 + 2)
+        val yesIntent = actionIntent(ctx, tabId, "y\n", reqBase + 1)
+        val noIntent = actionIntent(ctx, tabId, "n\n", reqBase + 2)
 
         val remoteInput = RemoteInput.Builder(KEY_REPLY)
             .setLabel("Reply...")
             .build()
         val replyIntent = PendingIntent.getBroadcast(
-            ctx, tabId * 10 + 3,
+            ctx, reqBase + 3,
             Intent(ctx, NotificationActionReceiver::class.java).apply {
                 action = ACTION_SEND_INPUT
                 putExtra(EXTRA_TAB_ID, tabId)
@@ -54,7 +55,7 @@ object RcNotificationManager {
             .build()
     }
 
-    private fun actionIntent(ctx: Context, tabId: Int, input: String, reqCode: Int): PendingIntent =
+    private fun actionIntent(ctx: Context, tabId: String, input: String, reqCode: Int): PendingIntent =
         PendingIntent.getBroadcast(
             ctx, reqCode,
             Intent(ctx, NotificationActionReceiver::class.java).apply {

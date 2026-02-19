@@ -45,7 +45,7 @@ class TerminalForegroundService : Service() {
                                 this@TerminalForegroundService, msg.tabId, msg.message,
                             )
                             NotificationManagerCompat.from(this@TerminalForegroundService)
-                                .notify(RemoteClaudeApplication.NOTIF_ID_ALERT_BASE + msg.tabId, notif)
+                                .notify(RemoteClaudeApplication.NOTIF_ID_ALERT_BASE + (msg.tabId.hashCode() and 0x7FFFFFFF), notif)
                         }
                     }
                     else -> {}
