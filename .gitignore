@@ -2,3 +2,7 @@
 .claude/
 .gradle/
 build/
+*.jks
+*.keystore
+keystore.properties
+/RemoteClaude/plugin/.intellijPlatform/

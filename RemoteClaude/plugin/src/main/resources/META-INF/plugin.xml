@@ -1,0 +1,32 @@
+<idea-plugin>
+    <id>com.remoteclaude</id>
+    <name>RemoteClaude</name>
+    <vendor>RemoteClaude</vendor>
+    <description>Control Claude Code terminal sessions from your Android device over WiFi.</description>
+
+    <depends>com.intellij.modules.platform</depends>
+    <depends>org.jetbrains.plugins.terminal</depends>
+
+    <extensions defaultExtensionNs="com.intellij">
+        <postStartupActivity
+            implementation="com.remoteclaude.plugin.RemoteClaudeStartupActivity"/>
+
+        <toolWindow
+            id="RemoteClaude"
+            secondary="false"
+            anchor="bottom"
+            factoryClass="com.remoteclaude.plugin.ui.RemoteClaudeToolWindowFactory"/>
+
+        <applicationService
+            serviceImplementation="com.remoteclaude.plugin.settings.RemoteClaudeSettings"/>
+
+        <projectService
+            serviceImplementation="com.remoteclaude.plugin.server.WsServer"/>
+
+        <projectService
+            serviceImplementation="com.remoteclaude.plugin.terminal.TerminalTabsWatcher"/>
+
+        <projectService
+            serviceImplementation="com.remoteclaude.plugin.orchestration.AgentLauncher"/>
+    </extensions>
+</idea-plugin>

@@ -1,0 +1,150 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0"/>
+  <link rel="stylesheet" href="xterm/xterm.css"/>
+  <script src="xterm/xterm.js"></script>
+  <script src="xterm/xterm-addon-fit.js"></script>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    html, body { width: 100%; height: 100%; background: #1e1e1e; overflow: hidden; }
+    #terminal { width: 100%; height: 100%; }
+  </style>
+</head>
+<body>
+  <div id="terminal"></div>
+  <script>
+    var term = new Terminal({
+      fontSize: 13,
+      fontFamily: '"Cascadia Code", "Fira Code", "Courier New", monospace',
+      theme: {
+        background: '#1e1e1e',
+        foreground: '#d4d4d4',
+        cursor: '#aeafad',
+        black: '#1e1e1e',
+        red: '#f44747',
+        green: '#608b4e',
+        yellow: '#dcdcaa',
+        blue: '#569cd6',
+        magenta: '#c586c0',
+        cyan: '#4ec9b0',
+        white: '#d4d4d4',
+        brightBlack: '#808080',
+        brightRed: '#f44747',
+        brightGreen: '#b5cea8',
+        brightYellow: '#dcdcaa',
+        brightBlue: '#9cdcfe',
+        brightMagenta: '#c586c0',
+        brightCyan: '#4ec9b0',
+        brightWhite: '#ffffff',
+      },
+      scrollback: 5000,
+      convertEol: true,
+      cursorBlink: true,
+      allowTransparency: false,
+    });
+
+    var fitAddon = new FitAddon.FitAddon();
+    term.loadAddon(fitAddon);
+    term.open(document.getElementById('terminal'));
+
+    function doFit() {
+      try {
+        fitAddon.fit();
+        console.log('[xterm] fit: cols=' + term.cols + ', rows=' + term.rows);
+      } catch(e) {
+        console.error('[xterm] fit error: ' + e.message);
+      }
+    }
+
+    // Use ResizeObserver to fit when container gets its real size
+    var termEl = document.getElementById('terminal');
+    if (window.ResizeObserver) {
+      var ro = new ResizeObserver(function() {
+        if (termEl.offsetHeight > 0) {
+          doFit();
+          // Also try to signal ready if not yet done
+          if (typeof trySignalReady === 'function') trySignalReady();
+        }
+      });
+      ro.observe(termEl);
+    }
+    // Also listen for window resize and do an initial fit
+    window.addEventListener('resize', doFit);
+    doFit();
+
+    // Called from Kotlin: write base64-encoded ANSI data
+    function writeData(base64) {
+      try {
+        console.log('[xterm] writeData called, base64.len=' + base64.length);
+        var binary = atob(base64);
+        var bytes = new Uint8Array(binary.length);
+        for (var i = 0; i < binary.length; i++) {
+          bytes[i] = binary.charCodeAt(i);
+        }
+        console.log('[xterm] writing ' + bytes.length + ' bytes to terminal');
+        term.write(bytes);
+      } catch(e) {
+        console.error('[xterm] writeData error: ' + e.message);
+      }
+    }
+
+    // Called from Kotlin: clear terminal
+    function clearTerminal() {
+      term.clear();
+    }
+
+    // Called from Kotlin: resize
+    function resizeTerminal(cols, rows) {
+      term.resize(cols, rows);
+    }
+
+    // Terminal input → Kotlin (for direct keyboard input in terminal)
+    term.onData(function(data) {
+      if (window.Android) {
+        window.Android.onTerminalInput(data);
+      }
+    });
+
+    // Self-test: write directly to verify xterm rendering works
+    term.write('\r\n[xterm self-test OK]\r\n');
+    console.log('[xterm] self-test written, cols=' + term.cols + ', rows=' + term.rows);
+
+    // Signal ready only when we have real dimensions (rows > 1)
+    var readySignaled = false;
+    function trySignalReady() {
+      if (readySignaled) return;
+      doFit();
+      console.log('[xterm] trySignalReady: cols=' + term.cols + ', rows=' + term.rows + ', containerH=' + termEl.offsetHeight);
+      if (term.rows > 1) {
+        readySignaled = true;
+        console.log('[xterm] READY with real dimensions: cols=' + term.cols + ', rows=' + term.rows);
+        if (window.Android) {
+          window.Android.onReady();
+        }
+      }
+    }
+
+    // Called from Kotlin when WebView gets real layout dimensions
+    function notifyLayoutReady() {
+      console.log('[xterm] notifyLayoutReady called, containerH=' + termEl.offsetHeight);
+      trySignalReady();
+      // If still not ready, retry a few times with increasing delays
+      if (!readySignaled) {
+        setTimeout(trySignalReady, 50);
+        setTimeout(trySignalReady, 200);
+        setTimeout(trySignalReady, 500);
+      }
+    }
+
+    // Try on initial load and with polling as fallback
+    trySignalReady();
+    setTimeout(trySignalReady, 100);
+    setTimeout(trySignalReady, 300);
+    setTimeout(trySignalReady, 600);
+    setTimeout(trySignalReady, 1000);
+    setTimeout(trySignalReady, 2000);
+  </script>
+</body>
+</html>

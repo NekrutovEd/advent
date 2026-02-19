@@ -99,7 +99,7 @@ fun App(appState: AppState) {
                                         onSend = { appState.sendToOne(chatState, prompt, scope) },
                                         enabled = !chatState.isLoading && appState.settings.apiKey.isNotBlank(),
                                         onDrop = if (index > 0) {{ appState.removeChat(index) }} else null,
-                                        modifier = Modifier.width(chatWidth).fillMaxHeight()
+                                        modifier = Modifier.width(350.dp).fillMaxHeight()
                                     )
                                 }
                             }
