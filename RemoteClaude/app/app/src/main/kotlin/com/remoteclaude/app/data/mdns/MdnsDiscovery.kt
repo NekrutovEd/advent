@@ -120,6 +120,14 @@ class MdnsDiscovery(context: Context) {
         }
     }
 
+    fun restartDiscovery(scope: CoroutineScope) {
+        Log.d(TAG, "mDNS: restarting discovery")
+        stopDiscovery()
+        _servers.value = emptyList()
+        lastSeen.clear()
+        startDiscovery(scope)
+    }
+
     fun stopDiscovery() {
         Log.d(TAG, "mDNS: stopping discovery")
         expiryJob?.cancel()

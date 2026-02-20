@@ -7,6 +7,7 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Computer
+import androidx.compose.material.icons.filled.NetworkPing
 import androidx.compose.material.icons.filled.QrCodeScanner
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
@@ -74,14 +75,30 @@ fun ConnectScreen(
             }
         }
 
-        // QR code scanner
-        OutlinedButton(
-            onClick = onScanQr,
-            modifier = Modifier.fillMaxWidth(),
-        ) {
-            Icon(Icons.Default.QrCodeScanner, contentDescription = null, modifier = Modifier.size(20.dp))
-            Spacer(Modifier.width(8.dp))
-            Text("Scan QR Code")
+        // QR code scanner + TCP subnet scan
+        val isScanning by viewModel.subnetScanner.scanning.collectAsState()
+        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            OutlinedButton(
+                onClick = onScanQr,
+                modifier = Modifier.weight(1f),
+            ) {
+                Icon(Icons.Default.QrCodeScanner, contentDescription = null, modifier = Modifier.size(20.dp))
+                Spacer(Modifier.width(8.dp))
+                Text("Scan QR")
+            }
+            OutlinedButton(
+                onClick = { viewModel.scanSubnet() },
+                enabled = !isScanning,
+                modifier = Modifier.weight(1f),
+            ) {
+                if (isScanning) {
+                    CircularProgressIndicator(modifier = Modifier.size(20.dp), strokeWidth = 2.dp)
+                } else {
+                    Icon(Icons.Default.NetworkPing, contentDescription = null, modifier = Modifier.size(20.dp))
+                }
+                Spacer(Modifier.width(8.dp))
+                Text("TCP Scan")
+            }
         }
 
         // Manual entry

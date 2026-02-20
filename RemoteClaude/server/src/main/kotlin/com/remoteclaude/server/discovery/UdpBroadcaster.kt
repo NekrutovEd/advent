@@ -10,9 +10,11 @@ class UdpBroadcaster {
     private val log = LoggerFactory.getLogger(UdpBroadcaster::class.java)
 
     private val BROADCAST_PORT = 19872
+    private val PROBE_PORT = 19873
 
     @Volatile private var running = false
     private var broadcastThread: Thread? = null
+    private var probeThread: Thread? = null
 
     fun start(port: Int) {
         running = true
@@ -81,6 +83,49 @@ class UdpBroadcaster {
                 log.warn("UDP: broadcaster thread failed: ${e.message}")
             }
         }
+
+        // Start probe listener — responds to active discovery requests from apps behind VPN
+        probeThread = thread(name = "RemoteClaudeServer-UDP-Probe", isDaemon = true) {
+            try {
+                val localAddr = NetworkUtils.getLocalAddress()
+                if (localAddr == null) {
+                    log.warn("UDP Probe: could not determine local address, probe listener not started")
+                    return@thread
+                }
+                val hostname = InetAddress.getLocalHost().hostName
+                    .replace(Regex("[^a-zA-Z0-9-]"), "-")
+                val instanceName = "RemoteClaude@$hostname"
+                val response = "RC|$instanceName|${localAddr.hostAddress}|$port"
+                val responseData = response.toByteArray(Charsets.UTF_8)
+
+                val probeSocket = DatagramSocket(PROBE_PORT, localAddr)
+                probeSocket.soTimeout = 2000
+                log.info("UDP Probe: listening on ${localAddr.hostAddress}:$PROBE_PORT")
+
+                val buf = ByteArray(64)
+                while (running) {
+                    try {
+                        val packet = DatagramPacket(buf, buf.size)
+                        probeSocket.receive(packet)
+                        val msg = String(packet.data, 0, packet.length, Charsets.UTF_8).trim()
+                        if (msg == "RC_PROBE") {
+                            log.info("UDP Probe: received probe from ${packet.address.hostAddress}:${packet.port}, responding")
+                            val reply = DatagramPacket(
+                                responseData, responseData.size,
+                                packet.address, packet.port
+                            )
+                            probeSocket.send(reply)
+                        }
+                    } catch (_: SocketTimeoutException) {
+                        // Normal timeout, loop continues
+                    }
+                }
+                probeSocket.close()
+                log.info("UDP Probe: listener exited")
+            } catch (e: Exception) {
+                log.warn("UDP Probe: listener thread failed: ${e.message}")
+            }
+        }
     }
 
     fun stop() {
@@ -88,6 +133,8 @@ class UdpBroadcaster {
         running = false
         broadcastThread?.interrupt()
         broadcastThread = null
+        probeThread?.interrupt()
+        probeThread = null
     }
 
     /** Returns list of broadcast addresses: limited broadcast + subnet broadcast if available. */

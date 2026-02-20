@@ -3,15 +3,18 @@ package com.remoteclaude.server.net
 import com.remoteclaude.server.config.ServerConfig
 import com.remoteclaude.server.protocol.*
 import com.remoteclaude.server.state.*
+import io.ktor.http.*
 import io.ktor.server.application.*
 import io.ktor.server.engine.*
 import io.ktor.server.netty.*
+import io.ktor.server.response.*
 import io.ktor.server.routing.*
 import io.ktor.server.websocket.*
 import io.ktor.websocket.*
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import org.slf4j.LoggerFactory
+import java.net.InetAddress
 import java.util.UUID
 import kotlin.time.Duration.Companion.seconds
 
@@ -35,6 +38,16 @@ class WebSocketHub(
                 timeout = 30.seconds
             }
             routing {
+                get("/discover") {
+                    val hostname = try {
+                        InetAddress.getLocalHost().hostName
+                            .replace(Regex("[^a-zA-Z0-9-]"), "-")
+                    } catch (_: Exception) { "unknown" }
+                    call.respondText(
+                        """{"name":"RemoteClaude@$hostname","port":${config.port}}""",
+                        ContentType.Application.Json
+                    )
+                }
                 webSocket("/plugin") {
                     handlePluginConnection(this)
                 }
