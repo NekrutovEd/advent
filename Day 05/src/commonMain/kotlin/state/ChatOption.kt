@@ -9,6 +9,7 @@ enum class ChatOption {
     STOP_WORDS,
     MAX_TOKENS,
     TEMPERATURE,
+    MODEL,
     RESPONSE_FORMAT;
 
     fun label(strings: Strings): String = when (this) {
@@ -18,6 +19,7 @@ enum class ChatOption {
         STOP_WORDS -> strings.optionStopWords
         MAX_TOKENS -> strings.optionMaxTokens
         TEMPERATURE -> strings.optionTemperature
+        MODEL -> strings.model
         RESPONSE_FORMAT -> strings.optionResponseFormat
     }
 }

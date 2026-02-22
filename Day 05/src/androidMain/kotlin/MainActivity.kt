@@ -12,7 +12,7 @@ class MainActivity : ComponentActivity() {
     private val appState by lazy {
         AppState(ChatApi()).also { state ->
             if (BuildConfig.API_KEY.isNotEmpty()) {
-                state.settings.apiKey = BuildConfig.API_KEY
+                state.settings.apiConfigs[0].apiKey = BuildConfig.API_KEY
             }
         }
     }

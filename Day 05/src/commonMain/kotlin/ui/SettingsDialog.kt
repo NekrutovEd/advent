@@ -1,5 +1,8 @@
 package ui
 
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.expandVertically
+import androidx.compose.animation.shrinkVertically
 import androidx.compose.foundation.layout.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
@@ -9,22 +12,29 @@ import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.unit.dp
 import i18n.Lang
 import i18n.LocalStrings
+import state.ApiConfig
 import state.SettingsState
 
-@OptIn(ExperimentalMaterial3Api::class)
+private class ApiConfigDraft(config: ApiConfig) {
+    var apiKey by mutableStateOf(config.apiKey)
+    var temperature by mutableStateOf(config.temperature)
+    var maxTokens by mutableStateOf(config.maxTokens)
+    var connectTimeout by mutableStateOf(config.connectTimeout)
+    var readTimeout by mutableStateOf(config.readTimeout)
+}
+
 @Composable
 fun SettingsDialog(
     settings: SettingsState,
     onDismiss: () -> Unit
 ) {
     val s = LocalStrings.current
-    var apiKey by remember { mutableStateOf(settings.apiKey) }
-    var model by remember { mutableStateOf(settings.model) }
-    var temperature by remember { mutableStateOf(settings.temperature) }
-    var maxTokens by remember { mutableStateOf(settings.maxTokens) }
-    var connectTimeout by remember { mutableStateOf(settings.connectTimeout) }
-    var readTimeout by remember { mutableStateOf(settings.readTimeout) }
-    var modelExpanded by remember { mutableStateOf(false) }
+    val drafts = remember { settings.apiConfigs.map { ApiConfigDraft(it) } }
+    val expandedApis = remember {
+        mutableStateMapOf<String, Boolean>().also { map ->
+            settings.apiConfigs.firstOrNull()?.let { map[it.id] = true }
+        }
+    }
 
     AlertDialog(
         onDismissRequest = onDismiss,
@@ -51,102 +61,115 @@ fun SettingsDialog(
                     }
                 }
 
-                OutlinedTextField(
-                    value = apiKey,
-                    onValueChange = { apiKey = it },
-                    label = { Text(s.apiKey) },
-                    visualTransformation = PasswordVisualTransformation(),
-                    singleLine = true,
-                    modifier = Modifier.fillMaxWidth()
-                )
+                HorizontalDivider()
 
-                ExposedDropdownMenuBox(
-                    expanded = modelExpanded,
-                    onExpandedChange = { modelExpanded = it }
-                ) {
-                    OutlinedTextField(
-                        value = model,
-                        onValueChange = {},
-                        readOnly = true,
-                        label = { Text(s.model) },
-                        trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = modelExpanded) },
-                        modifier = Modifier.menuAnchor(MenuAnchorType.PrimaryNotEditable).fillMaxWidth()
-                    )
-                    ExposedDropdownMenu(
-                        expanded = modelExpanded,
-                        onDismissRequest = { modelExpanded = false }
-                    ) {
-                        settings.availableModels.forEach { m ->
-                            DropdownMenuItem(
-                                text = { Text(m) },
-                                onClick = {
-                                    model = m
-                                    modelExpanded = false
-                                }
+                // API providers list
+                settings.apiConfigs.forEachIndexed { index, config ->
+                    val draft = drafts[index]
+                    val isExpanded = expandedApis[config.id] == true
+
+                    Column {
+                        // Section header with expand toggle
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Text(
+                                config.name,
+                                style = MaterialTheme.typography.titleSmall
                             )
+                            TextButton(onClick = {
+                                expandedApis[config.id] = !isExpanded
+                            }) {
+                                Text(if (isExpanded) "\u25B2" else "\u25BC")
+                            }
+                        }
+
+                        AnimatedVisibility(
+                            visible = isExpanded,
+                            enter = expandVertically(),
+                            exit = shrinkVertically()
+                        ) {
+                            Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                                OutlinedTextField(
+                                    value = draft.apiKey,
+                                    onValueChange = { draft.apiKey = it },
+                                    label = { Text(s.apiKey) },
+                                    visualTransformation = PasswordVisualTransformation(),
+                                    singleLine = true,
+                                    modifier = Modifier.fillMaxWidth()
+                                )
+
+                                Column {
+                                    Text(
+                                        s.temperatureValue("%.1f".format(draft.temperature)),
+                                        style = MaterialTheme.typography.bodyMedium
+                                    )
+                                    Slider(
+                                        value = draft.temperature,
+                                        onValueChange = { draft.temperature = it },
+                                        valueRange = 0f..2f,
+                                        steps = 19
+                                    )
+                                }
+
+                                OutlinedTextField(
+                                    value = draft.maxTokens,
+                                    onValueChange = { newValue ->
+                                        if (newValue.isEmpty() || newValue.all { it.isDigit() }) {
+                                            draft.maxTokens = newValue
+                                        }
+                                    },
+                                    label = { Text(s.maxTokensLabel) },
+                                    singleLine = true,
+                                    modifier = Modifier.fillMaxWidth()
+                                )
+
+                                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                                    OutlinedTextField(
+                                        value = draft.connectTimeout,
+                                        onValueChange = { newValue ->
+                                            if (newValue.isEmpty() || newValue.all { it.isDigit() }) {
+                                                draft.connectTimeout = newValue
+                                            }
+                                        },
+                                        label = { Text(s.connectTimeout) },
+                                        singleLine = true,
+                                        modifier = Modifier.weight(1f)
+                                    )
+                                    OutlinedTextField(
+                                        value = draft.readTimeout,
+                                        onValueChange = { newValue ->
+                                            if (newValue.isEmpty() || newValue.all { it.isDigit() }) {
+                                                draft.readTimeout = newValue
+                                            }
+                                        },
+                                        label = { Text(s.readTimeout) },
+                                        singleLine = true,
+                                        modifier = Modifier.weight(1f)
+                                    )
+                                }
+                            }
                         }
                     }
-                }
 
-                Column {
-                    Text(
-                        s.temperatureValue("%.1f".format(temperature)),
-                        style = MaterialTheme.typography.bodyMedium
-                    )
-                    Slider(
-                        value = temperature,
-                        onValueChange = { temperature = it },
-                        valueRange = 0f..2f,
-                        steps = 19
-                    )
-                }
-
-                OutlinedTextField(
-                    value = maxTokens,
-                    onValueChange = { newValue ->
-                        if (newValue.isEmpty() || newValue.all { it.isDigit() }) {
-                            maxTokens = newValue
-                        }
-                    },
-                    label = { Text(s.maxTokensLabel) },
-                    singleLine = true,
-                    modifier = Modifier.fillMaxWidth()
-                )
-
-                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    OutlinedTextField(
-                        value = connectTimeout,
-                        onValueChange = { newValue ->
-                            if (newValue.isEmpty() || newValue.all { it.isDigit() }) {
-                                connectTimeout = newValue
-                            }
-                        },
-                        label = { Text(s.connectTimeout) },
-                        singleLine = true,
-                        modifier = Modifier.weight(1f)
-                    )
-                    OutlinedTextField(
-                        value = readTimeout,
-                        onValueChange = { newValue ->
-                            if (newValue.isEmpty() || newValue.all { it.isDigit() }) {
-                                readTimeout = newValue
-                            }
-                        },
-                        label = { Text(s.readTimeout) },
-                        singleLine = true,
-                        modifier = Modifier.weight(1f)
-                    )
+                    if (index < settings.apiConfigs.size - 1) {
+                        HorizontalDivider()
+                    }
                 }
             }
         },
         confirmButton = {
             Button(onClick = {
-                settings.apiKey = apiKey
-                settings.model = model
-                settings.temperature = temperature
-                settings.maxTokens = maxTokens
-                settings.connectTimeout = connectTimeout
-                settings.readTimeout = readTimeout
+                settings.apiConfigs.forEachIndexed { index, config ->
+                    val draft = drafts[index]
+                    config.apiKey = draft.apiKey
+                    config.temperature = draft.temperature
+                    config.maxTokens = draft.maxTokens
+                    config.connectTimeout = draft.connectTimeout
+                    config.readTimeout = draft.readTimeout
+                }
                 onDismiss()
             }) {
                 Text(s.save)

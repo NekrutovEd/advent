@@ -26,7 +26,7 @@ class AppStateTest {
             ioDispatcher = Dispatchers.Unconfined
         )
         appState = AppState(api)
-        appState.settings.apiKey = "test-key"
+        appState.settings.apiConfigs[0].apiKey = "test-key"
         appState.addChat() // now we have 2 chats for existing tests
     }
 
@@ -175,7 +175,7 @@ class AppStateTest {
 
     @Test
     fun `sendToAll does nothing with blank apiKey`() = runTest {
-        appState.settings.apiKey = ""
+        appState.settings.apiConfigs[0].apiKey = ""
         val jobs = appState.sendToAll("Hello", this)
         assertTrue(jobs.isEmpty())
 
@@ -261,7 +261,7 @@ class AppStateTest {
         enqueueSuccess("R1")
         enqueueSuccess("R2")
 
-        appState.settings.maxTokens = "500"
+        appState.settings.apiConfigs[0].maxTokens = "500"
         appState.chats[0].maxTokensOverride = "100"
         val jobs = appState.sendToAll("Hello", this)
         jobs.forEach { it.join() }
@@ -280,7 +280,7 @@ class AppStateTest {
         enqueueSuccess("R1")
         enqueueSuccess("R2")
 
-        appState.settings.maxTokens = "300"
+        appState.settings.apiConfigs[0].maxTokens = "300"
         appState.chats[0].maxTokensOverride = ""
         appState.chats[1].maxTokensOverride = ""
         val jobs = appState.sendToAll("Hello", this)
@@ -357,7 +357,7 @@ class AppStateTest {
 
     @Test
     fun `sendToOne returns null for blank apiKey`() = runTest {
-        appState.settings.apiKey = ""
+        appState.settings.apiConfigs[0].apiKey = ""
         val job = appState.sendToOne(appState.chats[0], "Hello", this)
         assertNull(job)
     }
@@ -367,7 +367,7 @@ class AppStateTest {
         enqueueSuccess("R1")
         enqueueSuccess("R2")
 
-        appState.settings.temperature = 1.0f
+        appState.settings.apiConfigs[0].temperature = 1.0f
         appState.chats[0].temperatureOverride = 0.3f
         val jobs = appState.sendToAll("Hello", this)
         jobs.forEach { it.join() }
@@ -385,7 +385,7 @@ class AppStateTest {
     fun `sendToOne uses per-chat temperature override`() = runTest {
         enqueueSuccess("R1")
 
-        appState.settings.temperature = 1.0f
+        appState.settings.apiConfigs[0].temperature = 1.0f
         appState.chats[0].temperatureOverride = 0.5f
         val job = appState.sendToOne(appState.chats[0], "Hello", this)
         job?.join()
@@ -399,7 +399,7 @@ class AppStateTest {
     fun `sendToOne uses per-chat maxTokens override`() = runTest {
         enqueueSuccess("R1")
 
-        appState.settings.maxTokens = "500"
+        appState.settings.apiConfigs[0].maxTokens = "500"
         appState.chats[0].maxTokensOverride = "100"
         val job = appState.sendToOne(appState.chats[0], "Hello", this)
         job?.join()

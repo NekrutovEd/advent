@@ -160,6 +160,14 @@ class ChatOptionTest {
     }
 
     @Test
+    fun `toggleOption off resets model override`() {
+        chatState.toggleOption(ChatOption.MODEL)
+        chatState.modelOverride = "gpt-4o-mini"
+        chatState.toggleOption(ChatOption.MODEL)
+        assertNull(chatState.modelOverride)
+    }
+
+    @Test
     fun `toggleOption off resets response format`() {
         chatState.toggleOption(ChatOption.RESPONSE_FORMAT)
         chatState.responseFormatType = "json_object"
@@ -176,6 +184,7 @@ class ChatOptionTest {
         assertEquals("Stop Words", ChatOption.STOP_WORDS.label(EnStrings))
         assertEquals("Max Tokens", ChatOption.MAX_TOKENS.label(EnStrings))
         assertEquals("Temperature", ChatOption.TEMPERATURE.label(EnStrings))
+        assertEquals("Model", ChatOption.MODEL.label(EnStrings))
         assertEquals("Statistics", ChatOption.STATISTICS.label(EnStrings))
         assertEquals("Response Format", ChatOption.RESPONSE_FORMAT.label(EnStrings))
     }
@@ -187,6 +196,7 @@ class ChatOptionTest {
         assertEquals("Стоп-слова", ChatOption.STOP_WORDS.label(RuStrings))
         assertEquals("Макс. токенов", ChatOption.MAX_TOKENS.label(RuStrings))
         assertEquals("Температура", ChatOption.TEMPERATURE.label(RuStrings))
+        assertEquals("Модель", ChatOption.MODEL.label(RuStrings))
         assertEquals("Статистика", ChatOption.STATISTICS.label(RuStrings))
         assertEquals("Формат ответа", ChatOption.RESPONSE_FORMAT.label(RuStrings))
     }

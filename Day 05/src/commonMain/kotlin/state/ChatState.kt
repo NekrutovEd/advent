@@ -21,6 +21,7 @@ class ChatState(
     val stopWords = mutableStateListOf("")
     var maxTokensOverride by mutableStateOf("")
     var temperatureOverride by mutableStateOf<Float?>(null)
+    var modelOverride by mutableStateOf<String?>(null)
     var responseFormatType by mutableStateOf("text")
     var jsonSchema by mutableStateOf("")
     var lastUsage by mutableStateOf<TokenUsage?>(null)
@@ -48,6 +49,7 @@ class ChatState(
                 stopWords.add("")
             }
             ChatOption.MAX_TOKENS -> maxTokensOverride = ""
+            ChatOption.MODEL -> modelOverride = null
             ChatOption.TEMPERATURE -> temperatureOverride = null
             ChatOption.STATISTICS -> {
                 lastUsage = null

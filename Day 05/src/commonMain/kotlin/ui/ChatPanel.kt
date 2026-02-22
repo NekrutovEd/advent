@@ -25,6 +25,8 @@ fun ChatPanel(
     prompt: String,
     onSend: () -> Unit,
     enabled: Boolean,
+    availableModels: List<String>,
+    globalModel: String,
     modifier: Modifier = Modifier,
     onDrop: (() -> Unit)? = null
 ) {
@@ -158,6 +160,34 @@ fun ChatPanel(
                     valueRange = 0f..2f,
                     steps = 19
                 )
+            }
+        }
+        if (ChatOption.MODEL in chatState.visibleOptions) {
+            var modelDropdownExpanded by remember { mutableStateOf(false) }
+            val displayModel = chatState.modelOverride ?: globalModel
+            Row(
+                modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Box {
+                    OutlinedButton(onClick = { modelDropdownExpanded = true }) {
+                        Text(displayModel, style = MaterialTheme.typography.bodySmall)
+                    }
+                    DropdownMenu(
+                        expanded = modelDropdownExpanded,
+                        onDismissRequest = { modelDropdownExpanded = false }
+                    ) {
+                        availableModels.forEach { model ->
+                            DropdownMenuItem(
+                                text = { Text(model) },
+                                onClick = {
+                                    chatState.modelOverride = model
+                                    modelDropdownExpanded = false
+                                }
+                            )
+                        }
+                    }
+                }
             }
         }
         if (ChatOption.STATISTICS in chatState.visibleOptions) {

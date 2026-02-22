@@ -10,7 +10,7 @@ import ui.App
 fun main() = application {
     val windowState = rememberWindowState(width = 1100.dp, height = 700.dp)
     val appState = remember {
-        AppState(ChatApi()).also { it.settings.apiKey = System.getenv("OPENAI_API_KEY") ?: "" }
+        AppState(ChatApi()).also { it.settings.apiConfigs[0].apiKey = System.getenv("OPENAI_API_KEY") ?: "" }
     }
 
     Window(

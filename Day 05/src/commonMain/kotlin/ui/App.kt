@@ -29,6 +29,8 @@ fun App(appState: AppState) {
     var prompt by remember { mutableStateOf("") }
     var isTopCollapsed by remember { mutableStateOf(false) }
 
+    val hasApiKey = appState.settings.apiConfigs.any { it.apiKey.isNotBlank() }
+
     MaterialTheme(colorScheme = darkColorScheme()) {
         CompositionLocalProvider(LocalStrings provides stringsFor(appState.settings.lang)) {
             val s = LocalStrings.current
@@ -48,23 +50,52 @@ fun App(appState: AppState) {
                         }
                     }
 
-                    // Collapsible: global system prompt + prompt bar
+                    // Collapsible: global system prompt + model selector + prompt bar
                     AnimatedVisibility(
                         visible = !isTopCollapsed,
                         enter = expandVertically(),
                         exit = shrinkVertically()
                     ) {
+                        var modelSelectorExpanded by remember { mutableStateOf(false) }
                         Column {
-                            ConstraintsField(
-                                value = appState.settings.systemPrompt,
-                                onValueChange = { appState.settings.systemPrompt = it },
-                                placeholder = s.systemPromptGlobal
-                            )
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                ConstraintsField(
+                                    value = appState.settings.systemPrompt,
+                                    onValueChange = { appState.settings.systemPrompt = it },
+                                    placeholder = s.systemPromptGlobal,
+                                    modifier = Modifier.weight(1f)
+                                )
+                                Box(modifier = Modifier.padding(end = 8.dp)) {
+                                    OutlinedButton(onClick = { modelSelectorExpanded = true }) {
+                                        Text(
+                                            appState.settings.selectedModel,
+                                            style = MaterialTheme.typography.bodySmall
+                                        )
+                                    }
+                                    DropdownMenu(
+                                        expanded = modelSelectorExpanded,
+                                        onDismissRequest = { modelSelectorExpanded = false }
+                                    ) {
+                                        appState.settings.allModels().forEach { model ->
+                                            DropdownMenuItem(
+                                                text = { Text(model) },
+                                                onClick = {
+                                                    appState.settings.selectedModel = model
+                                                    modelSelectorExpanded = false
+                                                }
+                                            )
+                                        }
+                                    }
+                                }
+                            }
                             PromptBar(
                                 text = prompt,
                                 onTextChange = { prompt = it },
                                 onSend = { if (prompt.isNotBlank()) appState.sendToAll(prompt, scope) },
-                                enabled = !isBusy && appState.settings.apiKey.isNotBlank(),
+                                enabled = !isBusy && hasApiKey,
                                 onClearAll = { appState.clearAll() }
                             )
                         }
@@ -97,8 +128,10 @@ fun App(appState: AppState) {
                                         chatState = chatState,
                                         prompt = prompt,
                                         onSend = { appState.sendToOne(chatState, prompt, scope) },
-                                        enabled = !chatState.isLoading && appState.settings.apiKey.isNotBlank(),
+                                        enabled = !chatState.isLoading && hasApiKey,
                                         onDrop = if (index > 0) {{ appState.removeChat(index) }} else null,
+                                        availableModels = appState.settings.allModels(),
+                                        globalModel = appState.settings.selectedModel,
                                         modifier = Modifier.width(350.dp).fillMaxHeight()
                                     )
                                 }
@@ -134,6 +167,8 @@ private fun ChatColumn(
     prompt: String,
     onSend: () -> Unit,
     enabled: Boolean,
+    availableModels: List<String>,
+    globalModel: String,
     onDrop: (() -> Unit)? = null,
     modifier: Modifier = Modifier
 ) {
@@ -143,6 +178,8 @@ private fun ChatColumn(
         prompt = prompt,
         onSend = onSend,
         enabled = enabled,
+        availableModels = availableModels,
+        globalModel = globalModel,
         modifier = modifier,
         onDrop = onDrop
     )

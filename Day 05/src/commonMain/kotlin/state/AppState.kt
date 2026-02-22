@@ -39,30 +39,29 @@ class AppState(
     val isBusy: Boolean get() = chats.any { it.isLoading }
 
     fun sendToAll(prompt: String, scope: CoroutineScope): List<Job> {
-        if (prompt.isBlank() || settings.apiKey.isBlank()) return emptyList()
+        if (prompt.isBlank()) return emptyList()
 
-        val temperature = settings.temperature.toDouble()
-        val maxTokens = settings.maxTokensOrNull()
-        val model = settings.model
-        val apiKey = settings.apiKey
-        val connectTimeoutSec = settings.connectTimeoutSec()
-        val readTimeoutSec = settings.readTimeoutSec()
+        val globalModel = settings.selectedModel
         val globalSystemPrompt = settings.systemPrompt
-
         val supervisorScope = CoroutineScope(scope.coroutineContext + SupervisorJob())
 
-        return chats.map { chat ->
+        return chats.mapNotNull { chat ->
+            val model = chat.modelOverride ?: globalModel
+            val apiConfig = settings.configForModel(model) ?: return@mapNotNull null
+            if (apiConfig.apiKey.isBlank()) return@mapNotNull null
+
             val chatPrompt = applyConstraints(prompt, chat.constraints)
             val combinedSystemPrompt = combineSystemPrompts(globalSystemPrompt, chat.systemPrompt)
             val stop = chat.stopWords.filter { it.isNotBlank() }.ifEmpty { null }
-            val effectiveMaxTokens = chat.maxTokensOverrideOrNull() ?: maxTokens
-            val effectiveTemperature = chat.temperatureOverride?.toDouble() ?: temperature
+            val effectiveMaxTokens = chat.maxTokensOverrideOrNull() ?: apiConfig.maxTokensOrNull()
+            val effectiveTemperature = chat.temperatureOverride?.toDouble() ?: apiConfig.temperature.toDouble()
             val responseFormat = chat.responseFormatType
             val jsonSchema = chat.jsonSchema
+
             supervisorScope.launch {
                 chat.sendMessage(
-                    chatPrompt, apiKey, model, effectiveTemperature, effectiveMaxTokens,
-                    combinedSystemPrompt, connectTimeoutSec, readTimeoutSec,
+                    chatPrompt, apiConfig.apiKey, model, effectiveTemperature, effectiveMaxTokens,
+                    combinedSystemPrompt, apiConfig.connectTimeoutSec(), apiConfig.readTimeoutSec(),
                     stop, responseFormat, jsonSchema
                 )
             }
@@ -70,28 +69,25 @@ class AppState(
     }
 
     fun sendToOne(chat: ChatState, prompt: String, scope: CoroutineScope): Job? {
-        if (prompt.isBlank() || settings.apiKey.isBlank()) return null
+        if (prompt.isBlank()) return null
 
-        val temperature = settings.temperature.toDouble()
-        val maxTokens = settings.maxTokensOrNull()
-        val model = settings.model
-        val apiKey = settings.apiKey
-        val connectTimeoutSec = settings.connectTimeoutSec()
-        val readTimeoutSec = settings.readTimeoutSec()
+        val model = chat.modelOverride ?: settings.selectedModel
+        val apiConfig = settings.configForModel(model) ?: return null
+        if (apiConfig.apiKey.isBlank()) return null
+
         val globalSystemPrompt = settings.systemPrompt
-
         val chatPrompt = applyConstraints(prompt, chat.constraints)
         val combinedSystemPrompt = combineSystemPrompts(globalSystemPrompt, chat.systemPrompt)
         val stop = chat.stopWords.filter { it.isNotBlank() }.ifEmpty { null }
-        val effectiveMaxTokens = chat.maxTokensOverrideOrNull() ?: maxTokens
-        val effectiveTemperature = chat.temperatureOverride?.toDouble() ?: temperature
+        val effectiveMaxTokens = chat.maxTokensOverrideOrNull() ?: apiConfig.maxTokensOrNull()
+        val effectiveTemperature = chat.temperatureOverride?.toDouble() ?: apiConfig.temperature.toDouble()
         val responseFormat = chat.responseFormatType
         val jsonSchema = chat.jsonSchema
 
         return scope.launch {
             chat.sendMessage(
-                chatPrompt, apiKey, model, effectiveTemperature, effectiveMaxTokens,
-                combinedSystemPrompt, connectTimeoutSec, readTimeoutSec,
+                chatPrompt, apiConfig.apiKey, model, effectiveTemperature, effectiveMaxTokens,
+                combinedSystemPrompt, apiConfig.connectTimeoutSec(), apiConfig.readTimeoutSec(),
                 stop, responseFormat, jsonSchema
             )
         }
