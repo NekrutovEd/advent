@@ -23,6 +23,8 @@ data class RegisterPluginMessage(
     val ideName: String,
     val projectName: String,
     val hostname: String,
+    val projectPath: String = "",
+    val ideHomePath: String = "",
 ) : WsMessage()
 
 /** Plugin sends its full tab list */
@@ -236,6 +238,16 @@ data class CloseTabMessage(val tabId: String) : WsMessage()
 @SerialName("create_terminal")
 data class CreateTerminalMessage(val projectPath: String) : WsMessage()
 
+/** App creates a server-side terminal (no plugin needed) */
+@Serializable
+@SerialName("create_server_terminal")
+data class CreateServerTerminalMessage(val workingDir: String? = null) : WsMessage()
+
+/** App requests IDE launch for an offline plugin's project */
+@Serializable
+@SerialName("launch_ide")
+data class LaunchIdeMessage(val projectPath: String) : WsMessage()
+
 // ─── Server → App ────────────────────────────────────────────────────────────
 
 /** Sent on connect: full list of current tabs and plugins */
@@ -340,6 +352,9 @@ data class PluginInfo(
     val projectName: String,
     val hostname: String,
     val tabCount: Int = 0,
+    val connected: Boolean = true,
+    val projectPath: String = "",
+    val ideHomePath: String = "",
 )
 
 @Serializable

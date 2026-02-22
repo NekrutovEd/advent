@@ -256,6 +256,16 @@ class TerminalViewModel(private val wsClient: WsClient) : ViewModel() {
         }
     }
 
+    fun createServerTerminal(workingDir: String? = null) {
+        Log.d(TAG, "TerminalVM: createServerTerminal workingDir=$workingDir")
+        viewModelScope.launch { wsClient.send(CreateServerTerminalMessage(workingDir)) }
+    }
+
+    fun launchIde(projectPath: String) {
+        Log.d(TAG, "TerminalVM: launchIde projectPath=$projectPath")
+        viewModelScope.launch { wsClient.send(LaunchIdeMessage(projectPath)) }
+    }
+
     fun closeTab(tabId: String) {
         Log.d(TAG, "TerminalVM: closeTab tabId=$tabId")
         viewModelScope.launch { wsClient.send(CloseTabMessage(tabId)) }

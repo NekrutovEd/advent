@@ -1,15 +1,26 @@
 package com.remoteclaude.server.net
 
+import com.remoteclaude.server.config.KnownPlugin
 import com.remoteclaude.server.protocol.*
 import com.remoteclaude.server.state.*
+import com.remoteclaude.server.terminal.StandaloneTerminalManager
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.launch
 import org.slf4j.LoggerFactory
+import java.io.File
 
 class MessageRouter(
     val pluginRegistry: PluginRegistry,
     val appRegistry: AppRegistry,
     val tabRegistry: GlobalTabRegistry,
+    val knownPluginRegistry: KnownPluginRegistry,
 ) {
+    var standaloneManager: StandaloneTerminalManager? = null
+    var hub: WebSocketHub? = null
     private val log = LoggerFactory.getLogger(MessageRouter::class.java)
+    private val launchScope = CoroutineScope(Dispatchers.IO + SupervisorJob())
 
     // Active sessions
     private val pluginSessions = mutableMapOf<String, PluginSession>()   // pluginId -> session
@@ -67,7 +78,7 @@ class MessageRouter(
                 addLog("Plugin $pluginId registered ${message.tabs.size} tabs")
                 broadcastToApps(InitMessage(
                     tabs = tabRegistry.getAllTabs(),
-                    plugins = pluginRegistry.toPluginInfoList(tabRegistry),
+                    plugins = hub?.buildMergedPluginList() ?: pluginRegistry.toPluginInfoList(tabRegistry),
                 ))
             }
             is PluginOutputMessage -> {
@@ -130,11 +141,15 @@ class MessageRouter(
             }
             is InputMessage -> {
                 val (pluginId, localTabId) = TabNamespace.fromGlobal(message.tabId)
-                val session = pluginSessions[pluginId]
-                if (session != null) {
-                    session.send(ForwardInputMessage(localTabId, message.data))
+                if (standaloneManager?.isServerTerminal(pluginId) == true) {
+                    standaloneManager?.sendInput(localTabId, message.data)
                 } else {
-                    appSession.send(ErrorMessage("Plugin $pluginId not connected"))
+                    val session = pluginSessions[pluginId]
+                    if (session != null) {
+                        session.send(ForwardInputMessage(localTabId, message.data))
+                    } else {
+                        appSession.send(ErrorMessage("Plugin $pluginId not connected"))
+                    }
                 }
             }
             is RequestBufferMessage -> {
@@ -143,15 +158,25 @@ class MessageRouter(
                 if (buffer != null && buffer.isNotEmpty()) {
                     appSession.send(BufferMessage(message.tabId, buffer))
                 } else {
-                    // Forward to plugin
                     val (pluginId, localTabId) = TabNamespace.fromGlobal(message.tabId)
-                    pluginSessions[pluginId]?.send(ForwardRequestBufferMessage(localTabId))
+                    if (standaloneManager?.isServerTerminal(pluginId) != true) {
+                        pluginSessions[pluginId]?.send(ForwardRequestBufferMessage(localTabId))
+                    }
                 }
             }
             is ListProjectsMessage -> {
                 // Forward to all plugins, aggregate responses
                 for ((_, session) in pluginSessions) {
                     session.send(ForwardListProjectsMessage())
+                }
+                // Also provide projects from known offline plugins
+                val connectedPaths = pluginRegistry.getAll()
+                    .mapNotNull { it.projectPath.ifEmpty { null } }.toSet()
+                val offlineProjects = knownPluginRegistry.getAll()
+                    .filter { it.projectPath !in connectedPaths && it.projectPath.isNotEmpty() }
+                    .map { ProjectInfo(path = it.projectPath, name = it.projectName) }
+                if (offlineProjects.isNotEmpty()) {
+                    appSession.send(ProjectsListMessage(offlineProjects))
                 }
             }
             is LaunchAgentMessage -> {
@@ -176,7 +201,19 @@ class MessageRouter(
             }
             is CloseTabMessage -> {
                 val (pluginId, localTabId) = TabNamespace.fromGlobal(message.tabId)
-                pluginSessions[pluginId]?.send(ForwardCloseTabMessage(localTabId))
+                if (standaloneManager?.isServerTerminal(pluginId) == true) {
+                    standaloneManager?.close(localTabId)
+                } else {
+                    pluginSessions[pluginId]?.send(ForwardCloseTabMessage(localTabId))
+                }
+            }
+            is CreateServerTerminalMessage -> {
+                val mgr = standaloneManager
+                if (mgr != null) {
+                    mgr.create(message.workingDir)
+                } else {
+                    appSession.send(ErrorMessage("Server terminals not available"))
+                }
             }
             is CreateTerminalMessage -> {
                 val targetPlugin = findPluginForProject(message.projectPath)
@@ -186,6 +223,15 @@ class MessageRouter(
                     // Send to first plugin if no match
                     pluginSessions.values.firstOrNull()?.send(ForwardCreateTerminalMessage(message.projectPath))
                         ?: appSession.send(ErrorMessage("No plugins connected"))
+                }
+            }
+            is LaunchIdeMessage -> {
+                val known = knownPluginRegistry.get(message.projectPath)
+                if (known != null && known.ideHomePath.isNotEmpty()) {
+                    launchScope.launch { launchIde(known) }
+                    log.info("Launching IDE for project: ${message.projectPath}")
+                } else {
+                    appSession.send(ErrorMessage("IDE path not available for this project"))
                 }
             }
             else -> {
@@ -206,6 +252,10 @@ class MessageRouter(
 
     suspend fun sendInputToTab(globalTabId: String, data: String): Boolean {
         val (pluginId, localTabId) = TabNamespace.fromGlobal(globalTabId)
+        if (standaloneManager?.isServerTerminal(pluginId) == true) {
+            standaloneManager?.sendInput(localTabId, data)
+            return true
+        }
         val session = pluginSessions[pluginId] ?: return false
         session.send(ForwardInputMessage(localTabId, data))
         return true
@@ -220,9 +270,17 @@ class MessageRouter(
 
     suspend fun closeTab(globalTabId: String): Boolean {
         val (pluginId, localTabId) = TabNamespace.fromGlobal(globalTabId)
+        if (standaloneManager?.isServerTerminal(pluginId) == true) {
+            standaloneManager?.close(localTabId)
+            return true
+        }
         val session = pluginSessions[pluginId] ?: return false
         session.send(ForwardCloseTabMessage(localTabId))
         return true
+    }
+
+    suspend fun createServerTerminal(workingDir: String? = null): String? {
+        return standaloneManager?.create(workingDir)
     }
 
     // ── Utility ───────────────────────────────────────────────────────────
@@ -239,5 +297,20 @@ class MessageRouter(
         }
         // Fallback: first available plugin
         return pluginSessions.values.firstOrNull()
+    }
+
+    private fun launchIde(plugin: KnownPlugin) {
+        val isWindows = System.getProperty("os.name").lowercase().contains("win")
+        val binNames = if (isWindows)
+            listOf("bin/studio64.exe", "bin/idea64.exe", "bin/pycharm64.exe")
+        else
+            listOf("bin/studio.sh", "bin/idea.sh", "bin/pycharm.sh")
+        val exe = binNames.map { File(plugin.ideHomePath, it) }.firstOrNull { it.exists() }
+        if (exe != null) {
+            log.info("Launching IDE: ${exe.absolutePath} ${plugin.projectPath}")
+            ProcessBuilder(exe.absolutePath, plugin.projectPath).start()
+        } else {
+            log.warn("No IDE executable found in ${plugin.ideHomePath}")
+        }
     }
 }

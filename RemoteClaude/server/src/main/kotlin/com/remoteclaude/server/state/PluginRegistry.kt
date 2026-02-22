@@ -10,6 +10,8 @@ data class PluginEntry(
     val ideName: String,
     val projectName: String,
     val hostname: String,
+    val projectPath: String = "",
+    val ideHomePath: String = "",
 )
 
 class PluginRegistry {
@@ -18,8 +20,8 @@ class PluginRegistry {
     private val _pluginsFlow = MutableStateFlow<List<PluginEntry>>(emptyList())
     val pluginsFlow: StateFlow<List<PluginEntry>> = _pluginsFlow
 
-    fun register(pluginId: String, ideName: String, projectName: String, hostname: String): PluginEntry {
-        val entry = PluginEntry(pluginId, ideName, projectName, hostname)
+    fun register(pluginId: String, ideName: String, projectName: String, hostname: String, projectPath: String = "", ideHomePath: String = ""): PluginEntry {
+        val entry = PluginEntry(pluginId, ideName, projectName, hostname, projectPath, ideHomePath)
         plugins[pluginId] = entry
         _pluginsFlow.value = plugins.values.toList()
         return entry
@@ -44,6 +46,9 @@ class PluginRegistry {
                 projectName = entry.projectName,
                 hostname = entry.hostname,
                 tabCount = tabRegistry.getTabsForPlugin(entry.pluginId).size,
+                connected = true,
+                projectPath = entry.projectPath,
+                ideHomePath = entry.ideHomePath,
             )
         }
 }

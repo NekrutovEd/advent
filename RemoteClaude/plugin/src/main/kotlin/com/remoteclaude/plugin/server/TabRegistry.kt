@@ -51,6 +51,8 @@ class TabRegistry {
 
     fun getBuffer(tabId: Int): TabBuffer? = buffers[tabId]
 
+    fun getLastOutputTime(tabId: Int): Long? = lastOutputTime[tabId]
+
     fun getAllTabs(): List<TabInfo> = tabs.values.toList()
 
     fun getTabInfo(tabId: Int): TabInfo? = tabs[tabId]

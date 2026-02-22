@@ -1,5 +1,6 @@
 package com.remoteclaude.plugin.terminal
 
+import com.intellij.openapi.Disposable
 import com.intellij.openapi.diagnostic.Logger
 import com.intellij.openapi.project.Project
 import com.intellij.openapi.wm.ToolWindowManager
@@ -9,7 +10,7 @@ import com.remoteclaude.plugin.server.*
 import kotlinx.coroutines.*
 import java.util.concurrent.CompletableFuture
 
-class TerminalTabsWatcher(private val project: Project) {
+class TerminalTabsWatcher(private val project: Project) : Disposable {
 
     private val LOG = Logger.getInstance(TerminalTabsWatcher::class.java)
     private val scope = CoroutineScope(Dispatchers.Default + SupervisorJob())
@@ -223,38 +224,68 @@ class TerminalTabsWatcher(private val project: Project) {
         registry.updateTabState(tabId, TabState.RUNNING)
         client.send(PluginTabStateMessage(client.pluginId, tabId, TabState.RUNNING))
 
+        // Idle detection coroutine: checks every 500ms if output has been idle for 1.5s
+        val idleJob = scope.launch {
+            while (isActive) {
+                delay(500)
+                val lastOutput = registry.getLastOutputTime(tabId) ?: continue
+                val idleMs = System.currentTimeMillis() - lastOutput
+                if (idleMs >= 1500) {
+                    val currentState = registry.getTabInfo(tabId)?.state ?: TabState.RUNNING
+                    if (currentState == TabState.RUNNING || currentState == TabState.STARTING) {
+                        val bufferTail = registry.getBuffer(tabId)?.getSnapshot()?.takeLast(500) ?: ""
+                        val idleState = AgentLifecycleMonitor.analyzeIdle(bufferTail)
+                        if (idleState != null && idleState != currentState) {
+                            LOG.info("RemoteClaude: [tab $tabId] idle detected state=$idleState (idleMs=$idleMs)")
+                            registry.updateTabState(tabId, idleState)
+                            client.send(PluginTabStateMessage(client.pluginId, tabId, idleState))
+                        } else if (idleMs >= 6000) {
+                            // Fallback: 6+ seconds of no output with no pattern match — assume idle
+                            LOG.info("RemoteClaude: [tab $tabId] idle fallback: no output for ${idleMs}ms, forcing WAITING_INPUT")
+                            registry.updateTabState(tabId, TabState.WAITING_INPUT)
+                            client.send(PluginTabStateMessage(client.pluginId, tabId, TabState.WAITING_INPUT))
+                        }
+                    }
+                }
+            }
+        }
+
         val buf = CharArray(4096)
         val ctx = currentCoroutineContext()
-        while (ctx.isActive) {
-            try {
-                if (!connector.isConnected) {
-                    delay(500)
-                    continue
-                }
-                val n = connector.read(buf, 0, buf.size)
-                if (n > 0) {
-                    val data = String(buf, 0, n)
-                    registry.getBuffer(tabId)?.append(data)
-                    registry.touchOutput(tabId)
-
-                    val currentState = registry.getTabInfo(tabId)?.state ?: TabState.RUNNING
-                    val newState = AgentLifecycleMonitor.analyze(data, currentState)
-
-                    if (newState != currentState) {
-                        registry.updateTabState(tabId, newState)
-                        client.send(PluginTabStateMessage(client.pluginId, tabId, newState))
+        try {
+            while (ctx.isActive) {
+                try {
+                    if (!connector.isConnected) {
+                        delay(500)
+                        continue
                     }
-                    client.send(PluginOutputMessage(client.pluginId, tabId, data))
-                } else if (n < 0) {
-                    LOG.info("RemoteClaude: [tab $tabId] EOF")
+                    val n = connector.read(buf, 0, buf.size)
+                    if (n > 0) {
+                        val data = String(buf, 0, n)
+                        registry.getBuffer(tabId)?.append(data)
+                        registry.touchOutput(tabId)
+
+                        val currentState = registry.getTabInfo(tabId)?.state ?: TabState.RUNNING
+                        val newState = AgentLifecycleMonitor.analyze(data, currentState)
+
+                        if (newState != currentState) {
+                            registry.updateTabState(tabId, newState)
+                            client.send(PluginTabStateMessage(client.pluginId, tabId, newState))
+                        }
+                        client.send(PluginOutputMessage(client.pluginId, tabId, data))
+                    } else if (n < 0) {
+                        LOG.info("RemoteClaude: [tab $tabId] EOF")
+                        break
+                    }
+                } catch (e: InterruptedException) {
+                    break
+                } catch (e: Exception) {
+                    LOG.info("RemoteClaude: [tab $tabId] reader stopped: ${e.message}")
                     break
                 }
-            } catch (e: InterruptedException) {
-                break
-            } catch (e: Exception) {
-                LOG.info("RemoteClaude: [tab $tabId] reader stopped: ${e.message}")
-                break
             }
+        } finally {
+            idleJob.cancel()
         }
     }
 
@@ -310,13 +341,17 @@ class TerminalTabsWatcher(private val project: Project) {
                 client.send(PluginOutputMessage(client.pluginId, tabId, colorized))
                 LOG.info("RemoteClaude: [tab $tabId] sent initial document text (${lastText.length} chars)")
 
-                // Analyze initial state from existing terminal content
-                val initialState = AgentLifecycleMonitor.analyze(lastText.takeLast(1000), TabState.RUNNING)
+                // Analyze initial state from existing terminal content (use idle analysis for shell prompts)
+                val initialState = AgentLifecycleMonitor.analyzeIdle(lastText.takeLast(500))
+                    ?: AgentLifecycleMonitor.analyze(lastText.takeLast(1000), TabState.RUNNING)
                 if (initialState != TabState.RUNNING) {
                     registry.updateTabState(tabId, initialState)
                     client.send(PluginTabStateMessage(client.pluginId, tabId, initialState))
                 }
             }
+
+            var idleTicks = 0           // counts consecutive polls with no document change
+            val idleThreshold = 30      // 30 * 50ms = 1.5s
 
             while (isActive) {
                 delay(50)
@@ -324,6 +359,7 @@ class TerminalTabsWatcher(private val project: Project) {
                     document.modificationStamp to document.text
                 }
                 if (currentStamp != lastStamp) {
+                    idleTicks = 0
                     var rawTextForAnalysis: String
                     if (currentText.startsWith(lastText)) {
                         val deltaStart = lastText.length
@@ -360,6 +396,27 @@ class TerminalTabsWatcher(private val project: Project) {
 
                     lastStamp = currentStamp
                     lastText = currentText
+                } else {
+                    // No document change — increment idle counter
+                    idleTicks++
+                    // Check periodically (every 1.5s of continuous idleness)
+                    if (idleTicks >= idleThreshold && idleTicks % idleThreshold == 0) {
+                        val currentState = registry.getTabInfo(tabId)?.state ?: TabState.RUNNING
+                        if (currentState == TabState.RUNNING || currentState == TabState.STARTING) {
+                            val tail = currentText.takeLast(500)
+                            val idleState = AgentLifecycleMonitor.analyzeIdle(tail)
+                            if (idleState != null && idleState != currentState) {
+                                LOG.info("RemoteClaude: [tab $tabId] idle detected state=$idleState (ticks=$idleTicks)")
+                                registry.updateTabState(tabId, idleState)
+                                client.send(PluginTabStateMessage(client.pluginId, tabId, idleState))
+                            } else if (idleTicks >= idleThreshold * 4) {
+                                // Fallback: 6+ seconds of no output with no pattern match — assume idle
+                                LOG.info("RemoteClaude: [tab $tabId] idle fallback: no output for ${idleTicks * 50}ms, forcing WAITING_INPUT")
+                                registry.updateTabState(tabId, TabState.WAITING_INPUT)
+                                client.send(PluginTabStateMessage(client.pluginId, tabId, TabState.WAITING_INPUT))
+                            }
+                        }
+                    }
                 }
             }
         }
@@ -1123,6 +1180,10 @@ class TerminalTabsWatcher(private val project: Project) {
         tabContents.clear()
         cachedConnectors.clear()
         contentToTabId.clear()
+    }
+
+    override fun dispose() {
+        stop()
     }
 
     companion object {

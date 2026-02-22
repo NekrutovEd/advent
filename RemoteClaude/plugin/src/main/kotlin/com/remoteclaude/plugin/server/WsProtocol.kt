@@ -26,6 +26,8 @@ data class RegisterPluginMessage(
     val ideName: String,
     val projectName: String,
     val hostname: String,
+    val projectPath: String = "",
+    val ideHomePath: String = "",
 ) : WsMessage()
 
 /** Send full tab list to server */

@@ -1,5 +1,6 @@
 package com.remoteclaude.plugin.server
 
+import com.intellij.openapi.Disposable
 import com.intellij.openapi.components.Service
 import com.intellij.openapi.diagnostic.Logger
 import com.intellij.openapi.project.Project
@@ -14,7 +15,7 @@ import kotlinx.coroutines.channels.Channel
 import java.net.InetAddress
 
 @Service(Service.Level.PROJECT)
-class WsPluginClient(private val project: Project) {
+class WsPluginClient(private val project: Project) : Disposable {
 
     private val LOG = Logger.getInstance(WsPluginClient::class.java)
     private val scope = CoroutineScope(Dispatchers.IO + SupervisorJob())
@@ -80,7 +81,11 @@ class WsPluginClient(private val project: Project) {
                     val ideName = try {
                         com.intellij.openapi.application.ApplicationInfo.getInstance().fullApplicationName
                     } catch (_: Exception) { "IDE" }
-                    send(RegisterPluginMessage(pluginId, ideName, project.name, hostname))
+                    val projectPath = project.basePath ?: ""
+                    val ideHomePath = try {
+                        com.intellij.openapi.application.PathManager.getHomePath()
+                    } catch (_: Exception) { "" }
+                    send(RegisterPluginMessage(pluginId, ideName, project.name, hostname, projectPath, ideHomePath))
 
                     // Send outgoing messages
                     val sendJob = launch {
@@ -136,9 +141,21 @@ class WsPluginClient(private val project: Project) {
     fun stop() {
         LOG.info("RemoteClaude: stopping plugin client")
         connected = false
+        // Gracefully close WebSocket session so server receives disconnect
+        runCatching {
+            runBlocking(Dispatchers.IO) {
+                withTimeoutOrNull(2000) {
+                    session?.close(CloseReason(CloseReason.Codes.GOING_AWAY, "IDE closing"))
+                }
+            }
+        }
         connectJob?.cancel()
         scope.cancel()
         client.close()
+    }
+
+    override fun dispose() {
+        stop()
     }
 
     companion object {

@@ -13,6 +13,7 @@ version = "1.0.0"
 repositories {
     mavenCentral()
     google()
+    maven("https://packages.jetbrains.team/maven/p/ij/intellij-dependencies")
 }
 
 dependencies {
@@ -42,6 +43,9 @@ dependencies {
 
     // mDNS / Bonjour service advertisement
     implementation("org.jmdns:jmdns:3.5.9")
+
+    // PTY for standalone server terminals
+    implementation("org.jetbrains.pty4j:pty4j:0.12.13")
 }
 
 kotlin {

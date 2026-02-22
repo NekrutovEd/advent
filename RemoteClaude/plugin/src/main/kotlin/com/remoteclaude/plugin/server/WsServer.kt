@@ -1,5 +1,6 @@
 package com.remoteclaude.plugin.server
 
+import com.intellij.openapi.Disposable
 import com.intellij.openapi.components.Service
 import com.intellij.openapi.diagnostic.Logger
 import com.intellij.openapi.project.Project
@@ -20,7 +21,7 @@ import java.net.ServerSocket
  * The WebSocket server is replaced by WsPluginClient connecting to the central server.
  */
 @Service(Service.Level.PROJECT)
-class WsServer(private val project: Project) {
+class WsServer(private val project: Project) : Disposable {
 
     private val LOG = Logger.getInstance(WsServer::class.java)
 
@@ -85,6 +86,10 @@ class WsServer(private val project: Project) {
         }
     }
 
+    override fun dispose() {
+        stop()
+    }
+
     private fun deletePortFile() {
         try {
             val portFile = File(System.getProperty("user.home"), ".claude/.remoteclaude-port")
@@ -92,14 +97,8 @@ class WsServer(private val project: Project) {
         } catch (_: Exception) {}
     }
 
-    private fun findFreePort(): Int {
-        val settings = com.remoteclaude.plugin.settings.RemoteClaudeSettings.getInstance()
-        return try {
-            ServerSocket(settings.state.port).use { it.localPort }
-        } catch (e: Exception) {
-            ServerSocket(0).use { it.localPort }
-        }
-    }
+    private fun findFreePort(): Int =
+        ServerSocket(0).use { it.localPort }
 
     companion object {
         fun getInstance(project: Project): WsServer =

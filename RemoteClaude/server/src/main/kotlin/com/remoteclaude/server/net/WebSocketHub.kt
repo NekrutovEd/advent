@@ -1,5 +1,6 @@
 package com.remoteclaude.server.net
 
+import com.remoteclaude.server.config.KnownPlugin
 import com.remoteclaude.server.config.ServerConfig
 import com.remoteclaude.server.protocol.*
 import com.remoteclaude.server.state.*
@@ -23,6 +24,7 @@ class WebSocketHub(
     val appRegistry: AppRegistry,
     val tabRegistry: GlobalTabRegistry,
     val router: MessageRouter,
+    val knownPluginRegistry: KnownPluginRegistry,
 ) {
     private val log = LoggerFactory.getLogger(WebSocketHub::class.java)
     private var engine: EmbeddedServer<*, *>? = null
@@ -88,16 +90,30 @@ class WebSocketHub(
                     if (message is RegisterPluginMessage) {
                         pluginSession.pluginId = message.pluginId
                         pluginRegistry.register(
-                            message.pluginId, message.ideName, message.projectName, message.hostname
+                            message.pluginId, message.ideName, message.projectName, message.hostname,
+                            message.projectPath, message.ideHomePath,
                         )
                         router.addPluginSession(message.pluginId, pluginSession)
                         pluginSession.send(PluginRegisteredMessage(message.pluginId))
-                        log.info("Plugin registered: ${message.pluginId} (${message.ideName} - ${message.projectName})")
+                        log.info("Plugin registered: ${message.pluginId} (${message.ideName} - ${message.projectName}, path=${message.projectPath})")
 
-                        // Notify apps about new plugin
+                        // Persist to known plugins
+                        if (message.projectPath.isNotEmpty()) {
+                            knownPluginRegistry.upsert(KnownPlugin(
+                                projectPath = message.projectPath,
+                                projectName = message.projectName,
+                                hostname = message.hostname,
+                                ideName = message.ideName,
+                                ideHomePath = message.ideHomePath,
+                                lastSeenMs = System.currentTimeMillis(),
+                            ))
+                            knownPluginRegistry.saveToDisk()
+                        }
+
+                        // Notify apps — merge connected + known offline plugins
                         router.broadcastToApps(InitMessage(
                             tabs = tabRegistry.getAllTabs(),
-                            plugins = pluginRegistry.toPluginInfoList(tabRegistry),
+                            plugins = buildMergedPluginList(),
                         ))
                         continue
                     }
@@ -113,13 +129,13 @@ class WebSocketHub(
                 val removedTabs = tabRegistry.removeAllTabsForPlugin(pluginId)
                 pluginRegistry.unregister(pluginId)
 
-                // Notify apps about removed tabs and plugin
+                // Notify apps about removed tabs — plugin now appears as offline via known registry
                 for (tabId in removedTabs) {
                     router.broadcastToApps(TabRemovedMessage(tabId))
                 }
                 router.broadcastToApps(InitMessage(
                     tabs = tabRegistry.getAllTabs(),
-                    plugins = pluginRegistry.toPluginInfoList(tabRegistry),
+                    plugins = buildMergedPluginList(),
                 ))
             }
         }
@@ -130,10 +146,10 @@ class WebSocketHub(
         val appSession = AppSession(ws, sessionId)
         log.info("New app connection: $sessionId")
 
-        // Send init message with current state
+        // Send init message with current state (includes both connected and known offline plugins)
         appSession.send(InitMessage(
             tabs = tabRegistry.getAllTabs(),
-            plugins = pluginRegistry.toPluginInfoList(tabRegistry),
+            plugins = buildMergedPluginList(),
         ))
 
         // Send buffered output for each tab
@@ -177,5 +193,24 @@ class WebSocketHub(
             router.removeAppSession(sessionId)
             appRegistry.unregister(sessionId)
         }
+    }
+
+    /** Merge connected plugins with known offline plugins into a single list for apps */
+    fun buildMergedPluginList(): List<PluginInfo> {
+        val connected = pluginRegistry.toPluginInfoList(tabRegistry)
+        val connectedPaths = connected.mapNotNull { it.projectPath.ifEmpty { null } }.toSet()
+        val offline = knownPluginRegistry.getDisconnectedPaths(connectedPaths).map { known ->
+            PluginInfo(
+                pluginId = "offline:${known.projectPath}",
+                ideName = known.ideName,
+                projectName = known.projectName,
+                hostname = known.hostname,
+                tabCount = 0,
+                connected = false,
+                projectPath = known.projectPath,
+                ideHomePath = known.ideHomePath,
+            )
+        }
+        return connected + offline
     }
 }

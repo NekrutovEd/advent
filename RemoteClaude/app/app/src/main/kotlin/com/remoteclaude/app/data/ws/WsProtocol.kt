@@ -127,6 +127,14 @@ data class CloseTabMessage(val tabId: String) : WsMessage()
 @SerialName("create_terminal")
 data class CreateTerminalMessage(val projectPath: String) : WsMessage()
 
+@Serializable
+@SerialName("create_server_terminal")
+data class CreateServerTerminalMessage(val workingDir: String? = null) : WsMessage()
+
+@Serializable
+@SerialName("launch_ide")
+data class LaunchIdeMessage(val projectPath: String) : WsMessage()
+
 // ─── Shared data classes ─────────────────────────────────────────────────────
 
 @Serializable
@@ -146,6 +154,9 @@ data class PluginInfo(
     val projectName: String,
     val hostname: String,
     val tabCount: Int = 0,
+    val connected: Boolean = true,
+    val projectPath: String = "",
+    val ideHomePath: String = "",
 )
 
 @Serializable
