@@ -15,6 +15,16 @@ import i18n.LocalStrings
 import state.ApiConfig
 import state.SettingsState
 
+private class HistoryDraft(settings: SettingsState) {
+    var sendHistory by mutableStateOf(settings.defaultSendHistory)
+}
+
+private class SummarizationDraft(settings: SettingsState) {
+    var autoSummarize by mutableStateOf(settings.defaultAutoSummarize)
+    var threshold by mutableStateOf(settings.defaultSummarizeThreshold)
+    var keepLast by mutableStateOf(settings.defaultKeepLastMessages)
+}
+
 private class ApiConfigDraft(config: ApiConfig) {
     var apiKey by mutableStateOf(config.apiKey)
     var temperature by mutableStateOf(config.temperature)
@@ -29,6 +39,8 @@ fun SettingsDialog(
     onDismiss: () -> Unit
 ) {
     val s = LocalStrings.current
+    val historyDraft = remember { HistoryDraft(settings) }
+    val summarizationDraft = remember { SummarizationDraft(settings) }
     val drafts = remember { settings.apiConfigs.map { ApiConfigDraft(it) } }
     val expandedApis = remember {
         mutableStateMapOf<String, Boolean>().also { map ->
@@ -58,6 +70,54 @@ fun SettingsDialog(
                             )
                             Text(lang.displayName)
                         }
+                    }
+                }
+
+                HorizontalDivider()
+
+                // History global default
+                Text(s.globalHistory, style = MaterialTheme.typography.titleSmall)
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    Switch(
+                        checked = historyDraft.sendHistory,
+                        onCheckedChange = { historyDraft.sendHistory = it }
+                    )
+                    Text(s.sendHistory, style = MaterialTheme.typography.bodyMedium)
+                }
+
+                HorizontalDivider()
+
+                // Summarization global defaults
+                Text(s.globalSummarization, style = MaterialTheme.typography.titleSmall)
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    Switch(
+                        checked = summarizationDraft.autoSummarize,
+                        onCheckedChange = { summarizationDraft.autoSummarize = it }
+                    )
+                    Text(s.autoSummarize, style = MaterialTheme.typography.bodyMedium)
+                }
+                if (summarizationDraft.autoSummarize) {
+                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        OutlinedTextField(
+                            value = summarizationDraft.threshold,
+                            onValueChange = { if (it.isEmpty() || it.all { c -> c.isDigit() }) summarizationDraft.threshold = it },
+                            label = { Text(s.summarizeThresholdLabel) },
+                            singleLine = true,
+                            modifier = Modifier.weight(1f)
+                        )
+                        OutlinedTextField(
+                            value = summarizationDraft.keepLast,
+                            onValueChange = { if (it.isEmpty() || it.all { c -> c.isDigit() }) summarizationDraft.keepLast = it },
+                            label = { Text(s.keepLastLabel) },
+                            singleLine = true,
+                            modifier = Modifier.weight(1f)
+                        )
                     }
                 }
 
@@ -162,6 +222,10 @@ fun SettingsDialog(
         },
         confirmButton = {
             Button(onClick = {
+                settings.defaultSendHistory = historyDraft.sendHistory
+                settings.defaultAutoSummarize = summarizationDraft.autoSummarize
+                settings.defaultSummarizeThreshold = summarizationDraft.threshold
+                settings.defaultKeepLastMessages = summarizationDraft.keepLast
                 settings.apiConfigs.forEachIndexed { index, config ->
                     val draft = drafts[index]
                     config.apiKey = draft.apiKey

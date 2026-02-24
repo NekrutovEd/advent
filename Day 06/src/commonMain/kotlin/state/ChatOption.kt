@@ -8,9 +8,11 @@ enum class ChatOption {
     CONSTRAINTS,
     STOP_WORDS,
     MAX_TOKENS,
-    TEMPERATURE,
+    RESPONSE_FORMAT,
+    HISTORY,
+    SUMMARIZATION,
     MODEL,
-    RESPONSE_FORMAT;
+    TEMPERATURE;
 
     fun label(strings: Strings): String = when (this) {
         STATISTICS -> strings.optionStatistics
@@ -18,8 +20,10 @@ enum class ChatOption {
         CONSTRAINTS -> strings.optionConstraints
         STOP_WORDS -> strings.optionStopWords
         MAX_TOKENS -> strings.optionMaxTokens
-        TEMPERATURE -> strings.optionTemperature
-        MODEL -> strings.model
         RESPONSE_FORMAT -> strings.optionResponseFormat
+        HISTORY -> strings.optionHistory
+        SUMMARIZATION -> strings.optionSummarization
+        MODEL -> strings.model
+        TEMPERATURE -> strings.optionTemperature
     }
 }

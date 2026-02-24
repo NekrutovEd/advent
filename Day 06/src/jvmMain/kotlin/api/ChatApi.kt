@@ -98,6 +98,66 @@ class ChatApi(
         }
     }
 
+    override fun buildSnapshot(
+        history: List<ChatMessage>,
+        model: String,
+        temperature: Double?,
+        maxTokens: Int?,
+        systemPrompt: String?,
+        stop: List<String>?,
+        responseFormat: String?,
+        jsonSchema: String?,
+        userContent: String,
+        freshSummarization: Boolean
+    ): RequestSnapshot {
+        val metaObj = JSONObject()
+        metaObj.put("model", model)
+        if (temperature != null) metaObj.put("temperature", temperature)
+        if (maxTokens != null) metaObj.put("max_tokens", maxTokens)
+        val filteredStop = stop?.filter { it.isNotBlank() }
+        if (!filteredStop.isNullOrEmpty()) metaObj.put("stop", JSONArray(filteredStop))
+        when (responseFormat) {
+            "json_object" -> metaObj.put("response_format", JSONObject().put("type", "json_object"))
+            "json_schema" -> metaObj.put("response_format", JSONObject().apply {
+                put("type", "json_schema")
+                put("json_schema", JSONObject().apply {
+                    put("name", "custom_schema")
+                    put("strict", true)
+                    put("schema", JSONObject(jsonSchema ?: "{}"))
+                })
+            })
+        }
+
+        // If fresh summarization happened, extract the latest [Summary message from history
+        val freshMsg = if (freshSummarization) {
+            history.lastOrNull { it.role == "system" && it.content.startsWith("[Summary") }
+        } else null
+
+        val historyMessages = if (freshMsg != null) history - freshMsg else history
+
+        val historyArr = JSONArray()
+        if (!systemPrompt.isNullOrBlank()) {
+            historyArr.put(JSONObject().put("role", "system").put("content", systemPrompt))
+        }
+        historyMessages.forEach { msg ->
+            historyArr.put(JSONObject().put("role", msg.role).put("content", msg.content))
+        }
+
+        val freshSummaryJson = freshMsg?.let {
+            JSONObject().put("role", it.role).put("content", it.content).toString(2)
+        }
+
+        val currentObj = JSONObject().put("role", "user").put("content", userContent)
+
+        return RequestSnapshot(
+            metaJson = metaObj.toString(2),
+            historyCount = historyArr.length(),
+            historyJson = historyArr.toString(2),
+            freshSummaryJson = freshSummaryJson,
+            currentJson = currentObj.toString(2)
+        )
+    }
+
     override suspend fun sendMessage(
         history: List<ChatMessage>,
         apiKey: String,

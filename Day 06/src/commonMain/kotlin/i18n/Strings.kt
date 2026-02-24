@@ -35,6 +35,21 @@ interface Strings {
     val optionMaxTokens: String
     val optionTemperature: String
     val optionResponseFormat: String
+    val optionHistory: String
+    val optionSummarization: String
+
+    // Summarization
+    val autoSummarize: String
+    val summarizing: String
+    val summaryLabel: String
+    val summarizeThresholdLabel: String
+    val keepLastLabel: String
+    val sendHistory: String
+    val globalHistory: String
+    val globalSummarization: String
+    val freshSummaryLabel: String
+    fun summaryCountLabel(n: Int): String
+    fun requestHistoryLabel(n: Int): String
 
     // Statistics tooltip
     val lastRequest: String

@@ -9,7 +9,11 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 
 class ChatState(
-    private val chatApi: ChatApiInterface
+    private val chatApi: ChatApiInterface,
+    defaultSendHistory: Boolean = true,
+    defaultAutoSummarize: Boolean = true,
+    defaultSummarizeThreshold: String = "10",
+    defaultKeepLastMessages: String = "4"
 ) {
     val messages = mutableStateListOf<ChatMessage>()
     var isLoading by mutableStateOf(false)
@@ -28,6 +32,16 @@ class ChatState(
     var totalPromptTokens by mutableStateOf(0)
     var totalCompletionTokens by mutableStateOf(0)
     var totalTokens by mutableStateOf(0)
+
+    // History
+    var sendHistory by mutableStateOf(defaultSendHistory)
+
+    // Summarization
+    var autoSummarize by mutableStateOf(defaultAutoSummarize)
+    var summarizeThreshold by mutableStateOf(defaultSummarizeThreshold)
+    var keepLastMessages by mutableStateOf(defaultKeepLastMessages)
+    var isSummarizing by mutableStateOf(false)
+    var summaryCount by mutableStateOf(0)
 
     private val history = mutableListOf<ChatMessage>()
 
@@ -61,6 +75,12 @@ class ChatState(
                 responseFormatType = "text"
                 jsonSchema = ""
             }
+            ChatOption.HISTORY -> sendHistory = true
+            ChatOption.SUMMARIZATION -> {
+                autoSummarize = false
+                summarizeThreshold = "10"
+                keepLastMessages = "4"
+            }
         }
     }
 
@@ -78,6 +98,72 @@ class ChatState(
 
     fun maxTokensOverrideOrNull(): Int? = maxTokensOverride.toIntOrNull()
 
+    private suspend fun summarizeIfNeeded(
+        apiKey: String,
+        model: String,
+        temperature: Double?,
+        maxTokens: Int?,
+        connectTimeoutSec: Int?,
+        readTimeoutSec: Int?
+    ) {
+        if (!autoSummarize || !sendHistory) return
+        val threshold = summarizeThreshold.toIntOrNull()?.coerceAtLeast(4) ?: return
+        val keep = keepLastMessages.toIntOrNull()?.coerceAtLeast(2) ?: return
+
+        // Count only conversational messages (user/assistant)
+        val conversational = history.filter { it.role == "user" || it.role == "assistant" }
+        if (conversational.size <= threshold) return
+
+        val toSummarize = conversational.dropLast(keep)
+        val toKeep = conversational.takeLast(keep)
+
+        isSummarizing = true
+        try {
+            // Build the summarization request: existing summaries as context + messages to compress
+            val existingSummaries = history.filter { it.role == "system" && it.content.startsWith("[Summary") }
+            val summaryRequest = buildList {
+                addAll(existingSummaries)
+                addAll(toSummarize)
+                add(ChatMessage("user", "Summarize the conversation above concisely. Capture key topics, facts, decisions, and context needed to continue the conversation."))
+            }
+
+            val response = chatApi.sendMessage(
+                history = summaryRequest,
+                apiKey = apiKey,
+                model = model,
+                temperature = temperature,
+                maxTokens = maxTokens,
+                systemPrompt = "You are a helpful assistant that creates concise conversation summaries.",
+                connectTimeoutSec = connectTimeoutSec,
+                readTimeoutSec = readTimeoutSec,
+                stop = null,
+                responseFormat = null,
+                jsonSchema = null
+            )
+
+            summaryCount++
+            val summaryMsg = ChatMessage("system", "[Summary #$summaryCount]\n${response.content}")
+
+            // Rebuild history: existing summaries + new summary + tail
+            history.clear()
+            history.addAll(existingSummaries)
+            history.add(summaryMsg)
+            history.addAll(toKeep)
+
+            // Update UI messages: replace summarized user/assistant messages with a summary bubble
+            val nonSummaryIndices = messages.indices.filter {
+                messages[it].role == "user" || messages[it].role == "assistant"
+            }
+            val indicesToReplace = nonSummaryIndices.take(toSummarize.size)
+            if (indicesToReplace.isNotEmpty()) {
+                indicesToReplace.reversed().forEach { messages.removeAt(it) }
+                messages.add(indicesToReplace.first(), ChatMessage("summary", response.content))
+            }
+        } finally {
+            isSummarizing = false
+        }
+    }
+
     suspend fun sendMessage(
         userContent: String,
         apiKey: String,
@@ -94,13 +180,34 @@ class ChatState(
         isLoading = true
         error = null
 
-        val userMessage = ChatMessage("user", userContent)
+        val summaryCountBefore = summaryCount
+        summarizeIfNeeded(apiKey, model, temperature, maxTokens, connectTimeoutSec, readTimeoutSec)
+        val freshSummarization = summaryCount > summaryCountBefore
+
+        val snapshotHistory = if (sendHistory) history.toList() else emptyList()
+        val snapshot = try {
+            chatApi.buildSnapshot(
+                history = snapshotHistory,
+                model = model,
+                temperature = temperature,
+                maxTokens = maxTokens,
+                systemPrompt = systemPrompt,
+                stop = stop,
+                responseFormat = responseFormat,
+                jsonSchema = jsonSchema,
+                userContent = userContent,
+                freshSummarization = freshSummarization
+            )
+        } catch (_: Exception) { null }
+
+        val userMessage = ChatMessage("user", userContent, requestSnapshot = snapshot)
         messages.add(userMessage)
         history.add(userMessage)
 
         try {
+            val apiHistory = if (sendHistory) history else listOf(history.last())
             val response = chatApi.sendMessage(
-                history = history,
+                history = apiHistory,
                 apiKey = apiKey,
                 model = model,
                 temperature = temperature,
@@ -136,6 +243,8 @@ class ChatState(
         history.clear()
         error = null
         isLoading = false
+        isSummarizing = false
+        summaryCount = 0
         lastUsage = null
         totalPromptTokens = 0
         totalCompletionTokens = 0

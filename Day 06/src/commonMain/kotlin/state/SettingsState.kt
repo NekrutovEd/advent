@@ -11,6 +11,14 @@ class SettingsState {
     var systemPrompt by mutableStateOf("")
     var selectedModel by mutableStateOf("gpt-4o")
 
+    // Global history default
+    var defaultSendHistory by mutableStateOf(true)
+
+    // Global summarization defaults (per-chat option overrides these)
+    var defaultAutoSummarize by mutableStateOf(true)
+    var defaultSummarizeThreshold by mutableStateOf("10")
+    var defaultKeepLastMessages by mutableStateOf("4")
+
     val apiConfigs = mutableStateListOf(
         ApiConfig(
             id = "openai",

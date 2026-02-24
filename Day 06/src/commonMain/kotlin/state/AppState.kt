@@ -19,12 +19,20 @@ class AppState(
     var showSettings by mutableStateOf(false)
 
     init {
-        chats.add(ChatState(chatApi))
+        chats.add(newChat())
     }
 
     fun addChat() {
-        chats.add(ChatState(chatApi))
+        chats.add(newChat())
     }
+
+    private fun newChat() = ChatState(
+        chatApi,
+        defaultSendHistory = settings.defaultSendHistory,
+        defaultAutoSummarize = settings.defaultAutoSummarize,
+        defaultSummarizeThreshold = settings.defaultSummarizeThreshold,
+        defaultKeepLastMessages = settings.defaultKeepLastMessages
+    )
 
     fun removeChat(index: Int) {
         if (index > 0 && index < chats.size) {

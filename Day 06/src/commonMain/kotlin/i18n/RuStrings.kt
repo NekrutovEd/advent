@@ -35,6 +35,21 @@ object RuStrings : Strings {
     override val optionMaxTokens = "Макс. токенов"
     override val optionTemperature = "Температура"
     override val optionResponseFormat = "Формат ответа"
+    override val optionHistory = "История"
+    override val optionSummarization = "Суммаризация"
+
+    // Summarization
+    override val autoSummarize = "Авто-суммаризация"
+    override val summarizing = "Суммаризация истории..."
+    override val summaryLabel = "Саммари"
+    override val summarizeThresholdLabel = "Суммаризировать после N сообщений"
+    override val keepLastLabel = "Оставить последних N сообщений"
+    override val sendHistory = "Отправлять историю диалога"
+    override val globalHistory = "История (глобальные настройки)"
+    override val globalSummarization = "Суммаризация (глобальные настройки)"
+    override val freshSummaryLabel = "Применена суммаризация"
+    override fun summaryCountLabel(n: Int) = "Саммари создано: $n"
+    override fun requestHistoryLabel(n: Int) = "История ($n сообщений)"
 
     // Statistics tooltip
     override val lastRequest = "Последний запрос"

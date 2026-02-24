@@ -96,6 +96,9 @@ fun ChatPanel(
             }
         }
 
+        if (ChatOption.STATISTICS in chatState.visibleOptions) {
+            StatisticsRow(chatState)
+        }
         if (ChatOption.SYSTEM_PROMPT in chatState.visibleOptions) {
             ConstraintsField(
                 value = chatState.systemPrompt,
@@ -147,52 +150,6 @@ fun ChatPanel(
                 modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp).width(200.dp)
             )
         }
-        if (ChatOption.TEMPERATURE in chatState.visibleOptions) {
-            val tempValue = chatState.temperatureOverride ?: 1.0f
-            Column(modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)) {
-                Text(
-                    s.temperatureValue("%.1f".format(tempValue)),
-                    style = MaterialTheme.typography.bodyMedium
-                )
-                Slider(
-                    value = tempValue,
-                    onValueChange = { chatState.temperatureOverride = it },
-                    valueRange = 0f..2f,
-                    steps = 19
-                )
-            }
-        }
-        if (ChatOption.MODEL in chatState.visibleOptions) {
-            var modelDropdownExpanded by remember { mutableStateOf(false) }
-            val displayModel = chatState.modelOverride ?: globalModel
-            Row(
-                modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                Box {
-                    OutlinedButton(onClick = { modelDropdownExpanded = true }) {
-                        Text(displayModel, style = MaterialTheme.typography.bodySmall)
-                    }
-                    DropdownMenu(
-                        expanded = modelDropdownExpanded,
-                        onDismissRequest = { modelDropdownExpanded = false }
-                    ) {
-                        availableModels.forEach { model ->
-                            DropdownMenuItem(
-                                text = { Text(model) },
-                                onClick = {
-                                    chatState.modelOverride = model
-                                    modelDropdownExpanded = false
-                                }
-                            )
-                        }
-                    }
-                }
-            }
-        }
-        if (ChatOption.STATISTICS in chatState.visibleOptions) {
-            StatisticsRow(chatState)
-        }
         if (ChatOption.RESPONSE_FORMAT in chatState.visibleOptions) {
             var expanded by remember { mutableStateOf(false) }
             Column(modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)) {
@@ -228,6 +185,102 @@ fun ChatPanel(
                 }
             }
         }
+        if (ChatOption.HISTORY in chatState.visibleOptions) {
+            Row(
+                modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Switch(
+                    checked = chatState.sendHistory,
+                    onCheckedChange = { chatState.sendHistory = it }
+                )
+                Spacer(Modifier.width(8.dp))
+                Text(s.sendHistory, style = MaterialTheme.typography.bodyMedium)
+            }
+        }
+        if (ChatOption.SUMMARIZATION in chatState.visibleOptions) {
+            Column(modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Switch(
+                        checked = chatState.autoSummarize,
+                        onCheckedChange = { chatState.autoSummarize = it }
+                    )
+                    Spacer(Modifier.width(8.dp))
+                    Text(s.autoSummarize, style = MaterialTheme.typography.bodyMedium)
+                }
+                if (chatState.autoSummarize) {
+                    Row(
+                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        OutlinedTextField(
+                            value = chatState.summarizeThreshold,
+                            onValueChange = { chatState.summarizeThreshold = it },
+                            label = { Text(s.summarizeThresholdLabel, style = MaterialTheme.typography.labelSmall) },
+                            singleLine = true,
+                            modifier = Modifier.width(180.dp)
+                        )
+                        OutlinedTextField(
+                            value = chatState.keepLastMessages,
+                            onValueChange = { chatState.keepLastMessages = it },
+                            label = { Text(s.keepLastLabel, style = MaterialTheme.typography.labelSmall) },
+                            singleLine = true,
+                            modifier = Modifier.width(180.dp)
+                        )
+                    }
+                }
+                if (chatState.summaryCount > 0) {
+                    Text(
+                        s.summaryCountLabel(chatState.summaryCount),
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.outline
+                    )
+                }
+            }
+        }
+        if (ChatOption.MODEL in chatState.visibleOptions) {
+            var modelDropdownExpanded by remember { mutableStateOf(false) }
+            val displayModel = chatState.modelOverride ?: globalModel
+            Row(
+                modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Box {
+                    OutlinedButton(onClick = { modelDropdownExpanded = true }) {
+                        Text(displayModel, style = MaterialTheme.typography.bodySmall)
+                    }
+                    DropdownMenu(
+                        expanded = modelDropdownExpanded,
+                        onDismissRequest = { modelDropdownExpanded = false }
+                    ) {
+                        availableModels.forEach { model ->
+                            DropdownMenuItem(
+                                text = { Text(model) },
+                                onClick = {
+                                    chatState.modelOverride = model
+                                    modelDropdownExpanded = false
+                                }
+                            )
+                        }
+                    }
+                }
+            }
+        }
+        if (ChatOption.TEMPERATURE in chatState.visibleOptions) {
+            val tempValue = chatState.temperatureOverride ?: 1.0f
+            Column(modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)) {
+                Text(
+                    s.temperatureValue("%.1f".format(tempValue)),
+                    style = MaterialTheme.typography.bodyMedium
+                )
+                Slider(
+                    value = tempValue,
+                    onValueChange = { chatState.temperatureOverride = it },
+                    valueRange = 0f..2f,
+                    steps = 19
+                )
+            }
+        }
 
         HorizontalDivider()
 
@@ -241,6 +294,14 @@ fun ChatPanel(
                 }
             }
 
+            if (chatState.isSummarizing) {
+                Text(
+                    text = s.summarizing,
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.outline,
+                    modifier = Modifier.align(Alignment.BottomCenter).padding(bottom = 32.dp)
+                )
+            }
             if (chatState.isLoading) {
                 CircularProgressIndicator(
                     modifier = Modifier.align(Alignment.BottomCenter).padding(8.dp),
