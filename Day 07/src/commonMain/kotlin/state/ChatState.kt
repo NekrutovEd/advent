@@ -7,14 +7,17 @@ import androidx.compose.runtime.mutableStateListOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
+import kotlin.random.Random
 
 class ChatState(
     private val chatApi: ChatApiInterface,
     defaultSendHistory: Boolean = true,
     defaultAutoSummarize: Boolean = true,
     defaultSummarizeThreshold: String = "10",
-    defaultKeepLastMessages: String = "4"
+    defaultKeepLastMessages: String = "4",
+    id: String? = null
 ) {
+    val id: String = id ?: buildId()
     val messages = mutableStateListOf<ChatMessage>()
     var isLoading by mutableStateOf(false)
     var error by mutableStateOf<String?>(null)
@@ -44,6 +47,21 @@ class ChatState(
     var summaryCount by mutableStateOf(0)
 
     private val history = mutableListOf<ChatMessage>()
+
+    fun historySnapshot(): List<ChatMessage> = history.toList()
+
+    fun restoreHistory(msgs: List<ChatMessage>) {
+        history.clear()
+        history.addAll(msgs)
+    }
+
+    private companion object {
+        fun buildId(): String = Random.Default.nextBytes(4).joinToString("") {
+            val v = it.toInt() and 0xFF
+            val h = v.toString(16)
+            if (h.length == 1) "0$h" else h
+        }
+    }
 
     fun toggleOption(option: ChatOption) {
         if (option in visibleOptions) {

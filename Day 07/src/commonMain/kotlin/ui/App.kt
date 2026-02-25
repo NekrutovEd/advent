@@ -7,18 +7,13 @@ import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.material3.*
-import androidx.compose.runtime.Composable
-import androidx.compose.runtime.CompositionLocalProvider
-import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.remember
-import androidx.compose.runtime.rememberCoroutineScope
-import androidx.compose.runtime.setValue
+import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import i18n.LocalStrings
 import i18n.stringsFor
+import kotlinx.coroutines.delay
 import state.AppState
 import state.ChatState
 
@@ -31,20 +26,47 @@ fun App(appState: AppState) {
 
     val hasApiKey = appState.settings.apiConfigs.any { it.apiKey.isNotBlank() }
 
+    // Load persisted state on first composition
+    LaunchedEffect(Unit) {
+        appState.loadFromStorage()
+    }
+
+    // Auto-save every 60 seconds
+    LaunchedEffect(Unit) {
+        while (true) {
+            delay(60_000)
+            appState.saveToStorage()
+        }
+    }
+
     MaterialTheme(colorScheme = darkColorScheme()) {
         CompositionLocalProvider(LocalStrings provides stringsFor(appState.settings.lang)) {
             val s = LocalStrings.current
             Surface(color = MaterialTheme.colorScheme.background) {
                 Column(modifier = Modifier.fillMaxSize().safeDrawingPadding()) {
-                    // Top bar with collapse toggle and settings
+                    // Top bar: collapse toggle + session tab bar + settings
                     Row(
-                        modifier = Modifier.fillMaxWidth().padding(8.dp),
-                        horizontalArrangement = Arrangement.SpaceBetween,
+                        modifier = Modifier.fillMaxWidth().padding(horizontal = 8.dp, vertical = 4.dp),
                         verticalAlignment = Alignment.CenterVertically
                     ) {
                         IconButton(onClick = { isTopCollapsed = !isTopCollapsed }) {
                             Text(if (isTopCollapsed) "\u25BC" else "\u25B2")
                         }
+                        SessionTabBar(
+                            sessions = appState.sessions,
+                            archivedSessions = appState.archivedSessions,
+                            activeIndex = appState.activeSessionIndex,
+                            onSelectSession = { appState.selectSession(it) },
+                            onAddSession = { appState.addSession() },
+                            onDeleteSession = { appState.deleteSession(it) },
+                            onRenameSession = { index, name ->
+                                appState.sessions.getOrNull(index)?.name = name
+                            },
+                            onRestoreFromArchive = { appState.restoreSession(it) },
+                            onDeleteFromArchive = { appState.deleteFromArchive(it) },
+                            onClearArchive = { appState.clearArchive() },
+                            modifier = Modifier.weight(1f)
+                        )
                         TextButton(onClick = { appState.showSettings = true }) {
                             Text("\u2699 ${s.settingsTitle}")
                         }
@@ -94,19 +116,28 @@ fun App(appState: AppState) {
                             PromptBar(
                                 text = prompt,
                                 onTextChange = { prompt = it },
-                                onSend = { if (prompt.isNotBlank()) appState.sendToAll(prompt, scope) },
+                                onSend = {
+                                    if (prompt.isNotBlank()) {
+                                        val session = appState.activeSession
+                                        val isFirst = session.chats.all { it.messages.isEmpty() }
+                                        val sessionIdx = appState.activeSessionIndex
+                                        val capturedPrompt = prompt
+                                        appState.sendToAll(capturedPrompt, scope)
+                                        if (isFirst && session.name == "New") {
+                                            appState.autoRenameSession(sessionIdx, capturedPrompt, scope)
+                                        }
+                                    }
+                                },
                                 enabled = !isBusy && hasApiKey,
-                                onClearAll = { appState.clearAll() }
+                                onClearAll = { appState.activeSession.clearAll() }
                             )
                         }
                     }
 
                     // Dynamic chat area with minimum width and horizontal scroll
+                    val activeSession = appState.activeSession
                     BoxWithConstraints(modifier = Modifier.weight(1f).fillMaxWidth()) {
-                        val chatCount = appState.chats.size.coerceAtLeast(1)
-                        // Scrollable area excludes the + button (48dp).
-                        // minWidth of 260dp ensures a natural peek effect when there are 2+ chats:
-                        // the next chat is visibly clipped, hinting the user to scroll.
+                        val chatCount = activeSession.chats.size.coerceAtLeast(1)
                         val scrollAreaWidth = maxWidth - 48.dp
                         val chatWidth = maxOf(scrollAreaWidth - 28.dp, scrollAreaWidth / chatCount)
 
@@ -118,7 +149,7 @@ fun App(appState: AppState) {
                                     .fillMaxHeight()
                                     .horizontalScroll(rememberScrollState())
                             ) {
-                                appState.chats.forEachIndexed { index, chatState ->
+                                activeSession.chats.forEachIndexed { index, chatState ->
                                     if (index > 0) {
                                         VerticalDivider()
                                     }
@@ -127,9 +158,18 @@ fun App(appState: AppState) {
                                         title = s.chatTitle(index),
                                         chatState = chatState,
                                         prompt = prompt,
-                                        onSend = { appState.sendToOne(chatState, prompt, scope) },
+                                        onSend = {
+                                            val session = appState.activeSession
+                                            val isFirst = session.chats.all { it.messages.isEmpty() }
+                                            val sessionIdx = appState.activeSessionIndex
+                                            val capturedPrompt = prompt
+                                            appState.sendToOne(chatState, capturedPrompt, scope)
+                                            if (isFirst && session.name == "New") {
+                                                appState.autoRenameSession(sessionIdx, capturedPrompt, scope)
+                                            }
+                                        },
                                         enabled = !chatState.isLoading && hasApiKey,
-                                        onDrop = if (index > 0) {{ appState.removeChat(index) }} else null,
+                                        onDrop = if (index > 0) {{ activeSession.removeChat(index) }} else null,
                                         availableModels = appState.settings.allModels(),
                                         globalModel = appState.settings.selectedModel,
                                         modifier = Modifier.width(350.dp).fillMaxHeight()
@@ -140,7 +180,7 @@ fun App(appState: AppState) {
                             // Add chat button — always visible outside scroll
                             VerticalDivider()
                             TextButton(
-                                onClick = { appState.addChat() },
+                                onClick = { activeSession.addChat() },
                                 modifier = Modifier.fillMaxHeight().width(48.dp)
                             ) {
                                 Text("+", style = MaterialTheme.typography.headlineMedium)

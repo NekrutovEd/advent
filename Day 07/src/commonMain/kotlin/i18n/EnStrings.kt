@@ -64,6 +64,11 @@ object EnStrings : Strings {
     override val allCompletionTokensDesc = "All completion tokens this session"
     override val allTotalTokensDesc = "All tokens consumed this session"
 
+    // Session tabs
+    override val archiveLabel = "Archive"
+    override val clearArchive = "Clear archive"
+    override fun sessionDefaultName(n: Int) = "New"
+
     // Parameterized
     override fun stopWordPlaceholder(index: Int) = "Stop ${index + 1}"
     override fun chatTitle(index: Int) = "Chat ${index + 1}"

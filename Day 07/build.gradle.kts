@@ -5,6 +5,7 @@ plugins {
     id("org.jetbrains.compose") version "1.8.2"
     id("org.jetbrains.kotlin.plugin.compose") version "2.1.21"
     id("com.android.application") version "8.5.2"
+    kotlin("plugin.serialization") version "2.1.21"
 }
 
 group = "dev.aiadvent"
@@ -36,6 +37,7 @@ kotlin {
                 implementation(compose.materialIconsExtended)
                 implementation(compose.animation)
                 implementation("org.jetbrains.kotlinx:kotlinx-coroutines-core:1.10.2")
+                implementation("org.jetbrains.kotlinx:kotlinx-serialization-json:1.7.3")
             }
         }
 

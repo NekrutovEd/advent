@@ -64,6 +64,11 @@ object RuStrings : Strings {
     override val allCompletionTokensDesc = "Все токены ответов за сессию"
     override val allTotalTokensDesc = "Все токены за сессию"
 
+    // Session tabs
+    override val archiveLabel = "Архив"
+    override val clearArchive = "Очистить архив"
+    override fun sessionDefaultName(n: Int) = "New"
+
     // Parameterized
     override fun stopWordPlaceholder(index: Int) = "Стоп ${index + 1}"
     override fun chatTitle(index: Int) = "Чат ${index + 1}"

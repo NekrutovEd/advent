@@ -64,6 +64,11 @@ interface Strings {
     val allCompletionTokensDesc: String
     val allTotalTokensDesc: String
 
+    // Session tabs
+    val archiveLabel: String
+    val clearArchive: String
+    fun sessionDefaultName(n: Int): String
+
     // Parameterized
     fun stopWordPlaceholder(index: Int): String
     fun chatTitle(index: Int): String
