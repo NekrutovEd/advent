@@ -30,6 +30,7 @@ class AppStateTest {
         )
         appState = AppState(api)
         appState.settings.apiConfigs[0].apiKey = "test-key"
+        appState.settings.apiConfigs[0].baseUrl = server.url("/").toString().trimEnd('/')
         appState.activeSession.addChat() // now we have 2 chats for existing tests
     }
 

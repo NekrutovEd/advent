@@ -86,6 +86,7 @@ kotlin {
 
 tasks.named<Test>("desktopTest") {
     useJUnitPlatform()
+    binaryResultsDirectory.set(layout.buildDirectory.dir("test-results/desktopTest-bin"))
 }
 
 android {

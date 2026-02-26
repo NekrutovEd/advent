@@ -9,7 +9,7 @@ import i18n.Lang
 class SettingsState {
     var lang by mutableStateOf(Lang.EN)
     var systemPrompt by mutableStateOf("")
-    var selectedModel by mutableStateOf("gpt-4o")
+    var selectedModel by mutableStateOf("llama-3.3-70b-versatile")
 
     // Global history default
     var defaultSendHistory by mutableStateOf(true)
@@ -20,6 +20,29 @@ class SettingsState {
     var defaultKeepLastMessages by mutableStateOf("4")
 
     val apiConfigs = mutableStateListOf(
+        ApiConfig(
+            id = "groq",
+            name = "Groq",
+            baseUrl = "https://api.groq.com/openai",
+            availableModels = listOf(
+                // Llama 3.3 — flagship, 128K
+                "llama-3.3-70b-versatile",
+                // Llama 3.1 — fast/lightweight, 128K
+                "llama-3.1-8b-instant",
+                // Qwen QwQ — reasoning, 128K
+                "qwen-qwq-32b",
+                // DeepSeek R1 distill — reasoning, 128K
+                "deepseek-r1-distill-llama-70b",
+                // Mixtral — long context, 32K
+                "mixtral-8x7b-32768",
+                // Gemma 2 — Google, 8K
+                "gemma2-9b-it",
+                // Llama 3 70B classic — 8K
+                "llama3-70b-8192",
+                // Llama 3 8B classic — 8K
+                "llama3-8b-8192"
+            )
+        ),
         ApiConfig(
             id = "openai",
             name = "OpenAI",

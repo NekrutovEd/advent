@@ -63,7 +63,7 @@ class SessionState(
                 chat.sendMessage(
                     chatPrompt, apiConfig.apiKey, model, effectiveTemperature, effectiveMaxTokens,
                     combinedSystemPrompt, apiConfig.connectTimeoutSec(), apiConfig.readTimeoutSec(),
-                    stop, responseFormat, jsonSchema
+                    stop, responseFormat, jsonSchema, apiConfig.baseUrl
                 )
             }
         }
@@ -89,7 +89,7 @@ class SessionState(
             chat.sendMessage(
                 chatPrompt, apiConfig.apiKey, model, effectiveTemperature, effectiveMaxTokens,
                 combinedSystemPrompt, apiConfig.connectTimeoutSec(), apiConfig.readTimeoutSec(),
-                stop, responseFormat, jsonSchema
+                stop, responseFormat, jsonSchema, apiConfig.baseUrl
             )
         }
     }

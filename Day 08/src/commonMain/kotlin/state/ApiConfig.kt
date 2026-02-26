@@ -8,6 +8,7 @@ class ApiConfig(
     val id: String,
     val name: String,
     val availableModels: List<String>,
+    var baseUrl: String = "https://api.openai.com",
     defaultApiKey: String = "",
     defaultTemperature: Float = 1.0f,
     defaultMaxTokens: String = "",

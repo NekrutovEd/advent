@@ -122,7 +122,8 @@ class ChatState(
         temperature: Double?,
         maxTokens: Int?,
         connectTimeoutSec: Int?,
-        readTimeoutSec: Int?
+        readTimeoutSec: Int?,
+        baseUrl: String? = null
     ) {
         if (!autoSummarize || !sendHistory) return
         val threshold = summarizeThreshold.toIntOrNull()?.coerceAtLeast(4) ?: return
@@ -156,7 +157,8 @@ class ChatState(
                 readTimeoutSec = readTimeoutSec,
                 stop = null,
                 responseFormat = null,
-                jsonSchema = null
+                jsonSchema = null,
+                baseUrl = baseUrl
             )
 
             summaryCount++
@@ -193,13 +195,14 @@ class ChatState(
         readTimeoutSec: Int? = null,
         stop: List<String>? = null,
         responseFormat: String? = null,
-        jsonSchema: String? = null
+        jsonSchema: String? = null,
+        baseUrl: String? = null
     ) {
         isLoading = true
         error = null
 
         val summaryCountBefore = summaryCount
-        summarizeIfNeeded(apiKey, model, temperature, maxTokens, connectTimeoutSec, readTimeoutSec)
+        summarizeIfNeeded(apiKey, model, temperature, maxTokens, connectTimeoutSec, readTimeoutSec, baseUrl)
         val freshSummarization = summaryCount > summaryCountBefore
 
         val snapshotHistory = if (sendHistory) history.toList() else emptyList()
@@ -235,7 +238,8 @@ class ChatState(
                 readTimeoutSec = readTimeoutSec,
                 stop = stop,
                 responseFormat = responseFormat,
-                jsonSchema = jsonSchema
+                jsonSchema = jsonSchema,
+                baseUrl = baseUrl
             )
             val assistantMessage = ChatMessage("assistant", response.content)
             history.add(assistantMessage)

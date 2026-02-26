@@ -104,6 +104,7 @@ fun App(appState: AppState) {
                                         appState.settings.allModels().forEach { model ->
                                             DropdownMenuItem(
                                                 text = { Text(model) },
+                                                trailingIcon = { ModelInfoIcon(model) },
                                                 onClick = {
                                                     appState.settings.selectedModel = model
                                                     modelSelectorExpanded = false

@@ -169,11 +169,13 @@ class ChatApi(
         readTimeoutSec: Int?,
         stop: List<String>?,
         responseFormat: String?,
-        jsonSchema: String?
+        jsonSchema: String?,
+        baseUrl: String?
     ): ChatResponse {
         val requestBody = buildRequestBody(history, model, temperature, maxTokens, systemPrompt, stop, responseFormat, jsonSchema)
+        val effectiveBaseUrl = baseUrl ?: this.baseUrl
         val responseBody = withContext(ioDispatcher) {
-            sendHttp(apiKey, requestBody, connectTimeoutSec, readTimeoutSec)
+            sendHttp(apiKey, requestBody, connectTimeoutSec, readTimeoutSec, effectiveBaseUrl)
         }
         return ChatResponse(
             content = parseResponseContent(responseBody),
@@ -185,7 +187,8 @@ class ChatApi(
         apiKey: String,
         requestBody: String,
         connectTimeoutSec: Int?,
-        readTimeoutSec: Int?
+        readTimeoutSec: Int?,
+        effectiveBaseUrl: String
     ): String {
         val effectiveClient = if (connectTimeoutSec != null || readTimeoutSec != null) {
             client.newBuilder().apply {
@@ -197,7 +200,7 @@ class ChatApi(
         }
 
         val request = Request.Builder()
-            .url("$baseUrl/v1/chat/completions")
+            .url("$effectiveBaseUrl/v1/chat/completions")
             .addHeader("Authorization", "Bearer $apiKey")
             .addHeader("Content-Type", "application/json")
             .post(requestBody.toRequestBody(JSON_MEDIA_TYPE))

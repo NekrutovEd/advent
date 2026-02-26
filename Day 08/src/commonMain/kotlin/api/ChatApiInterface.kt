@@ -12,7 +12,8 @@ interface ChatApiInterface {
         readTimeoutSec: Int?,
         stop: List<String>?,
         responseFormat: String?,
-        jsonSchema: String?
+        jsonSchema: String?,
+        baseUrl: String? = null
     ): ChatResponse
 
     fun buildSnapshot(

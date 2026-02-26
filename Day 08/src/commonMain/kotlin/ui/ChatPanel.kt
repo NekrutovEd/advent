@@ -256,6 +256,7 @@ fun ChatPanel(
                         availableModels.forEach { model ->
                             DropdownMenuItem(
                                 text = { Text(model) },
+                                trailingIcon = { ModelInfoIcon(model) },
                                 onClick = {
                                     chatState.modelOverride = model
                                     modelDropdownExpanded = false
