@@ -1,0 +1,67 @@
+package ui
+
+import androidx.compose.foundation.layout.*
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Delete
+import androidx.compose.material.icons.filled.Send
+import androidx.compose.material3.*
+import androidx.compose.runtime.*
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.input.key.*
+import androidx.compose.ui.unit.dp
+import i18n.LocalStrings
+
+@Composable
+fun PromptBar(
+    text: String,
+    onTextChange: (String) -> Unit,
+    onSend: () -> Unit,
+    enabled: Boolean,
+    onClearAll: () -> Unit,
+    modifier: Modifier = Modifier
+) {
+    val s = LocalStrings.current
+    Row(
+        modifier = modifier.padding(8.dp),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        OutlinedTextField(
+            value = text,
+            onValueChange = onTextChange,
+            modifier = Modifier.weight(1f).onKeyEvent { event ->
+                if (event.key == Key.Enter && event.type == KeyEventType.KeyDown
+                    && !event.isShiftPressed
+                ) {
+                    if (text.isNotBlank() && enabled) onSend()
+                    true
+                } else false
+            },
+            placeholder = { Text(s.enterMessage) },
+            singleLine = true,
+            enabled = enabled,
+            trailingIcon = {
+                if (text.isNotEmpty()) {
+                    IconButton(onClick = { onTextChange("") }) {
+                        Text("\u2715")
+                    }
+                }
+            }
+        )
+
+        Spacer(Modifier.width(8.dp))
+
+        Button(
+            onClick = onSend,
+            enabled = enabled && text.isNotBlank()
+        ) {
+            Icon(Icons.Default.Send, contentDescription = null)
+        }
+
+        Spacer(Modifier.width(8.dp))
+
+        OutlinedButton(onClick = onClearAll) {
+            Icon(Icons.Default.Delete, contentDescription = null)
+        }
+    }
+}
