@@ -15,6 +15,8 @@ class ChatState(
     defaultAutoSummarize: Boolean = true,
     defaultSummarizeThreshold: String = "10",
     defaultKeepLastMessages: String = "4",
+    defaultSlidingWindow: String = "",
+    defaultExtractFacts: Boolean = false,
     id: String? = null
 ) {
     val id: String = id ?: buildId()
@@ -45,6 +47,14 @@ class ChatState(
     var keepLastMessages by mutableStateOf(defaultKeepLastMessages)
     var isSummarizing by mutableStateOf(false)
     var summaryCount by mutableStateOf(0)
+
+    // Sliding Window
+    var slidingWindow by mutableStateOf(defaultSlidingWindow)
+
+    // Sticky Facts
+    var extractFacts by mutableStateOf(defaultExtractFacts)
+    var stickyFacts by mutableStateOf("")
+    var isExtractingFacts by mutableStateOf(false)
 
     private val history = mutableListOf<ChatMessage>()
 
@@ -93,11 +103,14 @@ class ChatState(
                 responseFormatType = "text"
                 jsonSchema = ""
             }
-            ChatOption.HISTORY -> sendHistory = true
-            ChatOption.SUMMARIZATION -> {
+            ChatOption.CONTEXT -> {
+                sendHistory = true
                 autoSummarize = false
                 summarizeThreshold = "10"
                 keepLastMessages = "4"
+                slidingWindow = ""
+                extractFacts = false
+                stickyFacts = ""
             }
         }
     }
@@ -184,6 +197,76 @@ class ChatState(
         }
     }
 
+    private fun applySlidingWindow(msgs: List<ChatMessage>): List<ChatMessage> {
+        val windowSize = slidingWindow.toIntOrNull() ?: return msgs
+        if (windowSize <= 0) return msgs
+
+        // Separate system/summary messages from conversational messages
+        val systemMsgs = msgs.filter { it.role == "system" }
+        val conversational = msgs.filter { it.role != "system" }
+
+        val windowed = if (conversational.size > windowSize) {
+            conversational.takeLast(windowSize)
+        } else {
+            conversational
+        }
+
+        return systemMsgs + windowed
+    }
+
+    suspend fun extractFactsIfNeeded(
+        apiKey: String,
+        model: String,
+        temperature: Double?,
+        connectTimeoutSec: Int?,
+        readTimeoutSec: Int?,
+        baseUrl: String? = null
+    ) {
+        if (!extractFacts) return
+        // Need at least one user+assistant exchange
+        val conversational = history.filter { it.role == "user" || it.role == "assistant" }
+        if (conversational.size < 2) return
+
+        isExtractingFacts = true
+        try {
+            val lastExchange = conversational.takeLast(2)
+            val prompt = buildString {
+                if (stickyFacts.isNotBlank()) {
+                    appendLine("Current key facts:")
+                    appendLine(stickyFacts)
+                    appendLine()
+                }
+                appendLine("Latest exchange:")
+                lastExchange.forEach { msg ->
+                    appendLine("${msg.role}: ${msg.content}")
+                }
+                appendLine()
+                appendLine("Update the key facts list. Keep it concise — only important facts, decisions, preferences, and context. Remove outdated facts. Return only the updated facts list, no extra commentary.")
+            }
+
+            val response = chatApi.sendMessage(
+                history = listOf(ChatMessage("user", prompt)),
+                apiKey = apiKey,
+                model = model,
+                temperature = temperature,
+                maxTokens = 500,
+                systemPrompt = "You extract and maintain a concise list of key facts from conversations. Output only the facts list.",
+                connectTimeoutSec = connectTimeoutSec,
+                readTimeoutSec = readTimeoutSec,
+                stop = null,
+                responseFormat = null,
+                jsonSchema = null,
+                baseUrl = baseUrl
+            )
+
+            stickyFacts = response.content.trim()
+        } catch (_: Exception) {
+            // Silently ignore extraction failures
+        } finally {
+            isExtractingFacts = false
+        }
+    }
+
     suspend fun sendMessage(
         userContent: String,
         apiKey: String,
@@ -205,10 +288,18 @@ class ChatState(
         summarizeIfNeeded(apiKey, model, temperature, maxTokens, connectTimeoutSec, readTimeoutSec, baseUrl)
         val freshSummarization = summaryCount > summaryCountBefore
 
-        val snapshotHistory = if (sendHistory) history.toList() else emptyList()
+        val snapshotHistory = if (sendHistory) applySlidingWindow(history.toList()) else emptyList()
+
+        // Prepend sticky facts as system message in snapshot
+        val snapshotWithFacts = if (stickyFacts.isNotBlank()) {
+            listOf(ChatMessage("system", "[Context Facts]\n$stickyFacts")) + snapshotHistory
+        } else {
+            snapshotHistory
+        }
+
         val snapshot = try {
             chatApi.buildSnapshot(
-                history = snapshotHistory,
+                history = snapshotWithFacts,
                 model = model,
                 temperature = temperature,
                 maxTokens = maxTokens,
@@ -226,7 +317,16 @@ class ChatState(
         history.add(userMessage)
 
         try {
-            val apiHistory = if (sendHistory) history else listOf(history.last())
+            val fullHistory = if (sendHistory) history.toList() else listOf(history.last())
+            val windowedHistory = if (sendHistory) applySlidingWindow(fullHistory) else fullHistory
+
+            // Prepend sticky facts
+            val apiHistory = if (stickyFacts.isNotBlank()) {
+                listOf(ChatMessage("system", "[Context Facts]\n$stickyFacts")) + windowedHistory
+            } else {
+                windowedHistory
+            }
+
             val response = chatApi.sendMessage(
                 history = apiHistory,
                 apiKey = apiKey,
@@ -251,6 +351,9 @@ class ChatState(
                 totalCompletionTokens += response.usage.completionTokens
                 totalTokens += response.usage.totalTokens
             }
+
+            // Extract facts after successful response
+            extractFactsIfNeeded(apiKey, model, temperature, connectTimeoutSec, readTimeoutSec, baseUrl)
         } catch (e: Exception) {
             error = e.message ?: "Unknown error"
             if (history.isNotEmpty()) history.removeLast()
@@ -271,5 +374,7 @@ class ChatState(
         totalPromptTokens = 0
         totalCompletionTokens = 0
         totalTokens = 0
+        stickyFacts = ""
+        isExtractingFacts = false
     }
 }

@@ -15,14 +15,13 @@ import i18n.LocalStrings
 import state.ApiConfig
 import state.SettingsState
 
-private class HistoryDraft(settings: SettingsState) {
+private class ContextDraft(settings: SettingsState) {
     var sendHistory by mutableStateOf(settings.defaultSendHistory)
-}
-
-private class SummarizationDraft(settings: SettingsState) {
     var autoSummarize by mutableStateOf(settings.defaultAutoSummarize)
     var threshold by mutableStateOf(settings.defaultSummarizeThreshold)
     var keepLast by mutableStateOf(settings.defaultKeepLastMessages)
+    var slidingWindow by mutableStateOf(settings.defaultSlidingWindow)
+    var extractFacts by mutableStateOf(settings.defaultExtractFacts)
 }
 
 private class ApiConfigDraft(config: ApiConfig) {
@@ -39,8 +38,7 @@ fun SettingsDialog(
     onDismiss: () -> Unit
 ) {
     val s = LocalStrings.current
-    val historyDraft = remember { HistoryDraft(settings) }
-    val summarizationDraft = remember { SummarizationDraft(settings) }
+    val contextDraft = remember { ContextDraft(settings) }
     val drafts = remember { settings.apiConfigs.map { ApiConfigDraft(it) } }
     val expandedApis = remember {
         mutableStateMapOf<String, Boolean>().also { map ->
@@ -75,50 +73,64 @@ fun SettingsDialog(
 
                 HorizontalDivider()
 
-                // History global default
-                Text(s.globalHistory, style = MaterialTheme.typography.titleSmall)
+                // Context global defaults
+                Text(s.globalContext, style = MaterialTheme.typography.titleSmall)
                 Row(
                     verticalAlignment = Alignment.CenterVertically,
                     horizontalArrangement = Arrangement.spacedBy(8.dp)
                 ) {
                     Switch(
-                        checked = historyDraft.sendHistory,
-                        onCheckedChange = { historyDraft.sendHistory = it }
+                        checked = contextDraft.sendHistory,
+                        onCheckedChange = { contextDraft.sendHistory = it }
                     )
                     Text(s.sendHistory, style = MaterialTheme.typography.bodyMedium)
                 }
-
-                HorizontalDivider()
-
-                // Summarization global defaults
-                Text(s.globalSummarization, style = MaterialTheme.typography.titleSmall)
+                if (contextDraft.sendHistory) {
+                    OutlinedTextField(
+                        value = contextDraft.slidingWindow,
+                        onValueChange = { if (it.isEmpty() || it.all { c -> c.isDigit() }) contextDraft.slidingWindow = it },
+                        label = { Text(s.slidingWindowLabel) },
+                        singleLine = true,
+                        modifier = Modifier.fillMaxWidth()
+                    )
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        Switch(
+                            checked = contextDraft.autoSummarize,
+                            onCheckedChange = { contextDraft.autoSummarize = it }
+                        )
+                        Text(s.autoSummarize, style = MaterialTheme.typography.bodyMedium)
+                    }
+                    if (contextDraft.autoSummarize) {
+                        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                            OutlinedTextField(
+                                value = contextDraft.threshold,
+                                onValueChange = { if (it.isEmpty() || it.all { c -> c.isDigit() }) contextDraft.threshold = it },
+                                label = { Text(s.summarizeThresholdLabel) },
+                                singleLine = true,
+                                modifier = Modifier.weight(1f)
+                            )
+                            OutlinedTextField(
+                                value = contextDraft.keepLast,
+                                onValueChange = { if (it.isEmpty() || it.all { c -> c.isDigit() }) contextDraft.keepLast = it },
+                                label = { Text(s.keepLastLabel) },
+                                singleLine = true,
+                                modifier = Modifier.weight(1f)
+                            )
+                        }
+                    }
+                }
                 Row(
                     verticalAlignment = Alignment.CenterVertically,
                     horizontalArrangement = Arrangement.spacedBy(8.dp)
                 ) {
                     Switch(
-                        checked = summarizationDraft.autoSummarize,
-                        onCheckedChange = { summarizationDraft.autoSummarize = it }
+                        checked = contextDraft.extractFacts,
+                        onCheckedChange = { contextDraft.extractFacts = it }
                     )
-                    Text(s.autoSummarize, style = MaterialTheme.typography.bodyMedium)
-                }
-                if (summarizationDraft.autoSummarize) {
-                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                        OutlinedTextField(
-                            value = summarizationDraft.threshold,
-                            onValueChange = { if (it.isEmpty() || it.all { c -> c.isDigit() }) summarizationDraft.threshold = it },
-                            label = { Text(s.summarizeThresholdLabel) },
-                            singleLine = true,
-                            modifier = Modifier.weight(1f)
-                        )
-                        OutlinedTextField(
-                            value = summarizationDraft.keepLast,
-                            onValueChange = { if (it.isEmpty() || it.all { c -> c.isDigit() }) summarizationDraft.keepLast = it },
-                            label = { Text(s.keepLastLabel) },
-                            singleLine = true,
-                            modifier = Modifier.weight(1f)
-                        )
-                    }
+                    Text(s.extractFacts, style = MaterialTheme.typography.bodyMedium)
                 }
 
                 HorizontalDivider()
@@ -222,10 +234,12 @@ fun SettingsDialog(
         },
         confirmButton = {
             Button(onClick = {
-                settings.defaultSendHistory = historyDraft.sendHistory
-                settings.defaultAutoSummarize = summarizationDraft.autoSummarize
-                settings.defaultSummarizeThreshold = summarizationDraft.threshold
-                settings.defaultKeepLastMessages = summarizationDraft.keepLast
+                settings.defaultSendHistory = contextDraft.sendHistory
+                settings.defaultAutoSummarize = contextDraft.autoSummarize
+                settings.defaultSummarizeThreshold = contextDraft.threshold
+                settings.defaultKeepLastMessages = contextDraft.keepLast
+                settings.defaultSlidingWindow = contextDraft.slidingWindow
+                settings.defaultExtractFacts = contextDraft.extractFacts
                 settings.apiConfigs.forEachIndexed { index, config ->
                     val draft = drafts[index]
                     config.apiKey = draft.apiKey

@@ -7,8 +7,9 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.ContentCopy
 import androidx.compose.material.icons.filled.Delete
-import androidx.compose.material.icons.filled.Send
+import androidx.compose.material.icons.automirrored.filled.Send
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -28,6 +29,7 @@ fun ChatPanel(
     availableModels: List<String>,
     globalModel: String,
     modifier: Modifier = Modifier,
+    onClone: () -> Unit = {},
     onDrop: (() -> Unit)? = null
 ) {
     val s = LocalStrings.current
@@ -83,10 +85,13 @@ fun ChatPanel(
                     onClick = onSend,
                     enabled = enabled && prompt.isNotBlank()
                 ) {
-                    Icon(Icons.Default.Send, contentDescription = null, tint = MaterialTheme.colorScheme.primary)
+                    Icon(Icons.AutoMirrored.Filled.Send, contentDescription = null, tint = MaterialTheme.colorScheme.primary)
                 }
                 IconButton(onClick = { chatState.clear() }) {
                     Icon(Icons.Default.Delete, contentDescription = null)
+                }
+                IconButton(onClick = onClone) {
+                    Icon(Icons.Default.ContentCopy, contentDescription = null)
                 }
                 if (onDrop != null) {
                     TextButton(onClick = onDrop) {
@@ -185,55 +190,104 @@ fun ChatPanel(
                 }
             }
         }
-        if (ChatOption.HISTORY in chatState.visibleOptions) {
-            Row(
-                modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                Switch(
-                    checked = chatState.sendHistory,
-                    onCheckedChange = { chatState.sendHistory = it }
-                )
-                Spacer(Modifier.width(8.dp))
-                Text(s.sendHistory, style = MaterialTheme.typography.bodyMedium)
-            }
-        }
-        if (ChatOption.SUMMARIZATION in chatState.visibleOptions) {
+        if (ChatOption.CONTEXT in chatState.visibleOptions) {
             Column(modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)) {
+                // Send History toggle
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Switch(
-                        checked = chatState.autoSummarize,
-                        onCheckedChange = { chatState.autoSummarize = it }
+                        checked = chatState.sendHistory,
+                        onCheckedChange = { chatState.sendHistory = it }
                     )
                     Spacer(Modifier.width(8.dp))
-                    Text(s.autoSummarize, style = MaterialTheme.typography.bodyMedium)
+                    Text(s.sendHistory, style = MaterialTheme.typography.bodyMedium)
                 }
-                if (chatState.autoSummarize) {
+
+                if (chatState.sendHistory) {
+                    // Sliding Window
+                    OutlinedTextField(
+                        value = chatState.slidingWindow,
+                        onValueChange = { if (it.isEmpty() || it.all { c -> c.isDigit() }) chatState.slidingWindow = it },
+                        label = { Text(s.slidingWindowLabel, style = MaterialTheme.typography.labelSmall) },
+                        singleLine = true,
+                        modifier = Modifier.width(220.dp).padding(top = 4.dp)
+                    )
+
+                    // Auto-summarize toggle + threshold/keepLast
                     Row(
-                        horizontalArrangement = Arrangement.spacedBy(8.dp),
-                        verticalAlignment = Alignment.CenterVertically
+                        verticalAlignment = Alignment.CenterVertically,
+                        modifier = Modifier.padding(top = 4.dp)
                     ) {
-                        OutlinedTextField(
-                            value = chatState.summarizeThreshold,
-                            onValueChange = { chatState.summarizeThreshold = it },
-                            label = { Text(s.summarizeThresholdLabel, style = MaterialTheme.typography.labelSmall) },
-                            singleLine = true,
-                            modifier = Modifier.width(180.dp)
+                        Switch(
+                            checked = chatState.autoSummarize,
+                            onCheckedChange = { chatState.autoSummarize = it }
                         )
-                        OutlinedTextField(
-                            value = chatState.keepLastMessages,
-                            onValueChange = { chatState.keepLastMessages = it },
-                            label = { Text(s.keepLastLabel, style = MaterialTheme.typography.labelSmall) },
-                            singleLine = true,
-                            modifier = Modifier.width(180.dp)
-                        )
+                        Spacer(Modifier.width(8.dp))
+                        Text(s.autoSummarize, style = MaterialTheme.typography.bodyMedium)
+                    }
+                    if (chatState.autoSummarize) {
+                        Row(
+                            horizontalArrangement = Arrangement.spacedBy(8.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            OutlinedTextField(
+                                value = chatState.summarizeThreshold,
+                                onValueChange = { chatState.summarizeThreshold = it },
+                                label = { Text(s.summarizeThresholdLabel, style = MaterialTheme.typography.labelSmall) },
+                                singleLine = true,
+                                modifier = Modifier.width(180.dp)
+                            )
+                            OutlinedTextField(
+                                value = chatState.keepLastMessages,
+                                onValueChange = { chatState.keepLastMessages = it },
+                                label = { Text(s.keepLastLabel, style = MaterialTheme.typography.labelSmall) },
+                                singleLine = true,
+                                modifier = Modifier.width(180.dp)
+                            )
+                        }
                     }
                 }
+
+                // Summary count label
                 if (chatState.summaryCount > 0) {
                     Text(
                         s.summaryCountLabel(chatState.summaryCount),
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.outline
+                    )
+                }
+
+                // Extract Facts toggle
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    modifier = Modifier.padding(top = 4.dp)
+                ) {
+                    Switch(
+                        checked = chatState.extractFacts,
+                        onCheckedChange = { chatState.extractFacts = it }
+                    )
+                    Spacer(Modifier.width(8.dp))
+                    Text(s.extractFacts, style = MaterialTheme.typography.bodyMedium)
+                }
+
+                // Editable facts text area
+                if (chatState.extractFacts) {
+                    OutlinedTextField(
+                        value = chatState.stickyFacts,
+                        onValueChange = { chatState.stickyFacts = it },
+                        label = { Text(s.stickyFactsLabel, style = MaterialTheme.typography.labelSmall) },
+                        placeholder = { Text(s.stickyFactsPlaceholder) },
+                        modifier = Modifier.fillMaxWidth().heightIn(min = 60.dp),
+                        maxLines = 5
+                    )
+                }
+
+                // Extracting facts indicator
+                if (chatState.isExtractingFacts) {
+                    Text(
+                        s.extractingFacts,
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.outline,
+                        modifier = Modifier.padding(top = 2.dp)
                     )
                 }
             }

@@ -9,8 +9,7 @@ enum class ChatOption {
     STOP_WORDS,
     MAX_TOKENS,
     RESPONSE_FORMAT,
-    HISTORY,
-    SUMMARIZATION,
+    CONTEXT,
     MODEL,
     TEMPERATURE;
 
@@ -21,8 +20,7 @@ enum class ChatOption {
         STOP_WORDS -> strings.optionStopWords
         MAX_TOKENS -> strings.optionMaxTokens
         RESPONSE_FORMAT -> strings.optionResponseFormat
-        HISTORY -> strings.optionHistory
-        SUMMARIZATION -> strings.optionSummarization
+        CONTEXT -> strings.optionContext
         MODEL -> strings.model
         TEMPERATURE -> strings.optionTemperature
     }

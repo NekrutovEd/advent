@@ -35,6 +35,36 @@ class SessionState(
         }
     }
 
+    fun cloneChat(index: Int) {
+        val source = chats.getOrNull(index) ?: return
+        val clone = createChat()
+        clone.messages.addAll(source.messages)
+        clone.restoreHistory(source.historySnapshot())
+        clone.constraints = source.constraints
+        clone.systemPrompt = source.systemPrompt
+        clone.modelOverride = source.modelOverride
+        clone.maxTokensOverride = source.maxTokensOverride
+        clone.temperatureOverride = source.temperatureOverride
+        clone.responseFormatType = source.responseFormatType
+        clone.jsonSchema = source.jsonSchema
+        clone.sendHistory = source.sendHistory
+        clone.autoSummarize = source.autoSummarize
+        clone.summarizeThreshold = source.summarizeThreshold
+        clone.keepLastMessages = source.keepLastMessages
+        clone.summaryCount = source.summaryCount
+        clone.slidingWindow = source.slidingWindow
+        clone.extractFacts = source.extractFacts
+        clone.stickyFacts = source.stickyFacts
+        clone.stopWords.clear()
+        clone.stopWords.addAll(source.stopWords)
+        clone.visibleOptions = source.visibleOptions
+        clone.lastUsage = source.lastUsage
+        clone.totalPromptTokens = source.totalPromptTokens
+        clone.totalCompletionTokens = source.totalCompletionTokens
+        clone.totalTokens = source.totalTokens
+        chats.add(index + 1, clone)
+    }
+
     fun clearAll() {
         chats.forEach { it.clear() }
     }
@@ -100,6 +130,8 @@ class SessionState(
         defaultAutoSummarize = settings.defaultAutoSummarize,
         defaultSummarizeThreshold = settings.defaultSummarizeThreshold,
         defaultKeepLastMessages = settings.defaultKeepLastMessages,
+        defaultSlidingWindow = settings.defaultSlidingWindow,
+        defaultExtractFacts = settings.defaultExtractFacts,
         id = id
     )
 

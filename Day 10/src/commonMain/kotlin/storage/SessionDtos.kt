@@ -21,6 +21,9 @@ data class ChatStateDto(
     val summarizeThreshold: String,
     val keepLastMessages: String,
     val summaryCount: Int,
+    val slidingWindow: String = "",
+    val extractFacts: Boolean = false,
+    val stickyFacts: String = "",
     val visibleOptions: List<String>,
     val messages: List<ChatMessageDto>,
     val history: List<ChatMessageDto>

@@ -19,6 +19,10 @@ class SettingsState {
     var defaultSummarizeThreshold by mutableStateOf("10")
     var defaultKeepLastMessages by mutableStateOf("4")
 
+    // Global sliding window + sticky facts defaults
+    var defaultSlidingWindow by mutableStateOf("")
+    var defaultExtractFacts by mutableStateOf(false)
+
     val apiConfigs = mutableStateListOf(
         ApiConfig(
             id = "groq",

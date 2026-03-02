@@ -35,8 +35,7 @@ object EnStrings : Strings {
     override val optionMaxTokens = "Max Tokens"
     override val optionTemperature = "Temperature"
     override val optionResponseFormat = "Response Format"
-    override val optionHistory = "History"
-    override val optionSummarization = "Summarization"
+    override val optionContext = "Context"
 
     // Summarization
     override val autoSummarize = "Auto-summarize"
@@ -45,9 +44,13 @@ object EnStrings : Strings {
     override val summarizeThresholdLabel = "Summarize after N messages"
     override val keepLastLabel = "Keep last N messages"
     override val sendHistory = "Send conversation history"
-    override val globalHistory = "History (global default)"
-    override val globalSummarization = "Summarization (global defaults)"
+    override val globalContext = "Context (global defaults)"
     override val freshSummaryLabel = "Summarization applied"
+    override val slidingWindowLabel = "Message window (empty = all)"
+    override val extractFacts = "Extract key facts"
+    override val extractingFacts = "Extracting facts..."
+    override val stickyFactsLabel = "Key facts"
+    override val stickyFactsPlaceholder = "Key facts extracted from conversation..."
     override fun summaryCountLabel(n: Int) = "Summaries made: $n"
     override fun requestHistoryLabel(n: Int) = "History ($n messages)"
 

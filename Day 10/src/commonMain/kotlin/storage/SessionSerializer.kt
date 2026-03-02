@@ -71,6 +71,9 @@ object SessionSerializer {
                     summarizeThreshold = chat.summarizeThreshold,
                     keepLastMessages = chat.keepLastMessages,
                     summaryCount = chat.summaryCount,
+                    slidingWindow = chat.slidingWindow,
+                    extractFacts = chat.extractFacts,
+                    stickyFacts = chat.stickyFacts,
                     visibleOptions = chat.visibleOptions.map { it.name },
                     messages = chat.messages.map { ChatMessageDto(it.role, it.content) },
                     history = chat.historySnapshot().map { ChatMessageDto(it.role, it.content) }
@@ -103,8 +106,16 @@ object SessionSerializer {
             chat.summarizeThreshold = chatDto.summarizeThreshold
             chat.keepLastMessages = chatDto.keepLastMessages
             chat.summaryCount = chatDto.summaryCount
-            chat.visibleOptions = chatDto.visibleOptions.mapNotNull {
-                runCatching { state.ChatOption.valueOf(it) }.getOrNull()
+            chat.slidingWindow = chatDto.slidingWindow
+            chat.extractFacts = chatDto.extractFacts
+            chat.stickyFacts = chatDto.stickyFacts
+            chat.visibleOptions = chatDto.visibleOptions.mapNotNull { name ->
+                // Backward compat: map old HISTORY/SUMMARIZATION to CONTEXT
+                val mapped = when (name) {
+                    "HISTORY", "SUMMARIZATION" -> "CONTEXT"
+                    else -> name
+                }
+                runCatching { state.ChatOption.valueOf(mapped) }.getOrNull()
             }.toSet()
             chat.messages.addAll(chatDto.messages.map { api.ChatMessage(it.role, it.content) })
             chat.restoreHistory(chatDto.history.map { api.ChatMessage(it.role, it.content) })
