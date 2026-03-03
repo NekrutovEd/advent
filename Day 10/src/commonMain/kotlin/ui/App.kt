@@ -170,6 +170,7 @@ fun App(appState: AppState) {
                                             }
                                         },
                                         enabled = !chatState.isLoading && hasApiKey,
+                                        onClone = { activeSession.cloneChat(index) },
                                         onDrop = if (index > 0) {{ activeSession.removeChat(index) }} else null,
                                         availableModels = appState.settings.allModels(),
                                         globalModel = appState.settings.selectedModel,
@@ -210,6 +211,7 @@ private fun ChatColumn(
     enabled: Boolean,
     availableModels: List<String>,
     globalModel: String,
+    onClone: () -> Unit = {},
     onDrop: (() -> Unit)? = null,
     modifier: Modifier = Modifier
 ) {
@@ -222,6 +224,7 @@ private fun ChatColumn(
         availableModels = availableModels,
         globalModel = globalModel,
         modifier = modifier,
+        onClone = onClone,
         onDrop = onDrop
     )
 }
