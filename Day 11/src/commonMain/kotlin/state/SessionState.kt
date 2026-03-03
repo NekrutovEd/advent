@@ -18,6 +18,7 @@ class SessionState(
 ) {
     var name by mutableStateOf(name)
     val chats = mutableStateListOf<ChatState>()
+    val workingMemory = mutableStateListOf<MemoryItem>()
 
     val isBusy: Boolean get() = chats.any { it.isLoading }
 
@@ -34,6 +35,26 @@ class SessionState(
             chats.removeAt(index)
         }
     }
+
+    fun addWorkingMemoryItem(content: String, source: MemorySource, timestamp: Long): MemoryItem {
+        val item = MemoryItem(id = buildMemoryId(), content = content, source = source, timestamp = timestamp)
+        workingMemory.add(item)
+        return item
+    }
+
+    fun removeWorkingMemoryItem(itemId: String) {
+        workingMemory.removeAll { it.id == itemId }
+    }
+
+    fun updateWorkingMemoryItem(itemId: String, newContent: String) {
+        val index = workingMemory.indexOfFirst { it.id == itemId }
+        if (index >= 0) {
+            workingMemory[index] = workingMemory[index].copy(content = newContent)
+        }
+    }
+
+    fun workingMemoryText(): String =
+        workingMemory.joinToString("\n") { "- ${it.content}" }
 
     fun cloneChat(index: Int) {
         val source = chats.getOrNull(index) ?: return
@@ -53,8 +74,7 @@ class SessionState(
         clone.keepLastMessages = source.keepLastMessages
         clone.summaryCount = source.summaryCount
         clone.slidingWindow = source.slidingWindow
-        clone.extractFacts = source.extractFacts
-        clone.stickyFacts = source.stickyFacts
+        clone.extractMemory = source.extractMemory
         clone.stopWords.clear()
         clone.stopWords.addAll(source.stopWords)
         clone.visibleOptions = source.visibleOptions
@@ -69,12 +89,19 @@ class SessionState(
         chats.forEach { it.clear() }
     }
 
-    fun sendToAll(prompt: String, scope: CoroutineScope): List<Job> {
+    fun sendToAll(
+        prompt: String,
+        scope: CoroutineScope,
+        longTermMemoryText: String = "",
+        timestamp: Long = 0L,
+        onLongTermExtracted: ((List<String>) -> Unit)? = null
+    ): List<Job> {
         if (prompt.isBlank()) return emptyList()
 
         val globalModel = settings.selectedModel
         val globalSystemPrompt = settings.systemPrompt
         val supervisorScope = CoroutineScope(scope.coroutineContext + SupervisorJob())
+        val wmText = workingMemoryText()
 
         return chats.mapNotNull { chat ->
             val model = chat.modelOverride ?: globalModel
@@ -93,13 +120,28 @@ class SessionState(
                 chat.sendMessage(
                     chatPrompt, apiConfig.apiKey, model, effectiveTemperature, effectiveMaxTokens,
                     combinedSystemPrompt, apiConfig.connectTimeoutSec(), apiConfig.readTimeoutSec(),
-                    stop, responseFormat, jsonSchema, apiConfig.baseUrl
+                    stop, responseFormat, jsonSchema, apiConfig.baseUrl,
+                    workingMemoryText = wmText,
+                    longTermMemoryText = longTermMemoryText,
+                    onMemoryExtracted = { result ->
+                        result.workingItems.forEach { addWorkingMemoryItem(it, MemorySource.AUTO_EXTRACTED, timestamp) }
+                        if (result.longTermItems.isNotEmpty()) {
+                            onLongTermExtracted?.invoke(result.longTermItems)
+                        }
+                    }
                 )
             }
         }
     }
 
-    fun sendToOne(chat: ChatState, prompt: String, scope: CoroutineScope): Job? {
+    fun sendToOne(
+        chat: ChatState,
+        prompt: String,
+        scope: CoroutineScope,
+        longTermMemoryText: String = "",
+        timestamp: Long = 0L,
+        onLongTermExtracted: ((List<String>) -> Unit)? = null
+    ): Job? {
         if (prompt.isBlank()) return null
 
         val model = chat.modelOverride ?: settings.selectedModel
@@ -114,12 +156,21 @@ class SessionState(
         val effectiveTemperature = chat.temperatureOverride?.toDouble() ?: apiConfig.temperature.toDouble()
         val responseFormat = chat.responseFormatType
         val jsonSchema = chat.jsonSchema
+        val wmText = workingMemoryText()
 
         return scope.launch {
             chat.sendMessage(
                 chatPrompt, apiConfig.apiKey, model, effectiveTemperature, effectiveMaxTokens,
                 combinedSystemPrompt, apiConfig.connectTimeoutSec(), apiConfig.readTimeoutSec(),
-                stop, responseFormat, jsonSchema, apiConfig.baseUrl
+                stop, responseFormat, jsonSchema, apiConfig.baseUrl,
+                workingMemoryText = wmText,
+                longTermMemoryText = longTermMemoryText,
+                onMemoryExtracted = { result ->
+                    result.workingItems.forEach { addWorkingMemoryItem(it, MemorySource.AUTO_EXTRACTED, timestamp) }
+                    if (result.longTermItems.isNotEmpty()) {
+                        onLongTermExtracted?.invoke(result.longTermItems)
+                    }
+                }
             )
         }
     }
@@ -131,7 +182,7 @@ class SessionState(
         defaultSummarizeThreshold = settings.defaultSummarizeThreshold,
         defaultKeepLastMessages = settings.defaultKeepLastMessages,
         defaultSlidingWindow = settings.defaultSlidingWindow,
-        defaultExtractFacts = settings.defaultExtractFacts,
+        defaultExtractMemory = settings.defaultExtractMemory,
         id = id
     )
 

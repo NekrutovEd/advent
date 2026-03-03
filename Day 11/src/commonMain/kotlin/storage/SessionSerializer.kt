@@ -3,7 +3,10 @@ package storage
 import kotlinx.serialization.encodeToString
 import kotlinx.serialization.json.Json
 import state.AppState
+import state.MemoryItem
+import state.MemorySource
 import state.SessionState
+import state.buildMemoryId
 
 object SessionSerializer {
     internal val json = Json { ignoreUnknownKeys = true }
@@ -12,7 +15,8 @@ object SessionSerializer {
         val dto = AppStateDto(
             activeSessionIndex = appState.activeSessionIndex,
             sessions = appState.sessions.map { encodeSessionToDto(it) },
-            archivedSessions = appState.archivedSessions.toList()
+            archivedSessions = appState.archivedSessions.toList(),
+            longTermMemory = appState.longTermMemory.map { MemoryItemDto(it.id, it.content, it.source.name, it.timestamp) }
         )
         return json.encodeToString(dto)
     }
@@ -29,6 +33,13 @@ object SessionSerializer {
             appState.archivedSessions.clear()
             appState.archivedSessions.addAll(dto.archivedSessions)
             appState.activeSessionIndex = dto.activeSessionIndex.coerceIn(0, appState.sessions.size - 1)
+
+            // Restore long-term memory
+            appState.longTermMemory.clear()
+            dto.longTermMemory.forEach { memDto ->
+                val source = try { MemorySource.valueOf(memDto.source) } catch (_: Exception) { MemorySource.MANUAL }
+                appState.longTermMemory.add(MemoryItem(id = memDto.id, content = memDto.content, source = source, timestamp = memDto.timestamp))
+            }
         } catch (_: Exception) {
             // Leave state as-is on parse failure
         }
@@ -72,17 +83,18 @@ object SessionSerializer {
                     keepLastMessages = chat.keepLastMessages,
                     summaryCount = chat.summaryCount,
                     slidingWindow = chat.slidingWindow,
-                    extractFacts = chat.extractFacts,
-                    stickyFacts = chat.stickyFacts,
+                    extractFacts = chat.extractMemory, // backward compat
+                    extractMemory = chat.extractMemory,
                     visibleOptions = chat.visibleOptions.map { it.name },
                     messages = chat.messages.map { ChatMessageDto(it.role, it.content) },
                     history = chat.historySnapshot().map { ChatMessageDto(it.role, it.content) }
                 )
-            }
+            },
+            workingMemory = session.workingMemory.map { MemoryItemDto(it.id, it.content, it.source.name, it.timestamp) }
         )
     }
 
-    private fun decodeSessionFromDto(dto: SessionDto, appState: AppState): SessionState {
+    internal fun decodeSessionFromDto(dto: SessionDto, appState: AppState): SessionState {
         val session = SessionState(
             chatApi = appState.chatApi,
             settings = appState.settings,
@@ -107,8 +119,7 @@ object SessionSerializer {
             chat.keepLastMessages = chatDto.keepLastMessages
             chat.summaryCount = chatDto.summaryCount
             chat.slidingWindow = chatDto.slidingWindow
-            chat.extractFacts = chatDto.extractFacts
-            chat.stickyFacts = chatDto.stickyFacts
+            chat.extractMemory = chatDto.extractMemory || chatDto.extractFacts
             chat.visibleOptions = chatDto.visibleOptions.mapNotNull { name ->
                 // Backward compat: map old HISTORY/SUMMARIZATION to CONTEXT
                 val mapped = when (name) {
@@ -122,6 +133,34 @@ object SessionSerializer {
             session.chats.add(chat)
         }
         if (session.chats.isEmpty()) session.chats.add(session.createChat())
+
+        // Restore working memory
+        dto.workingMemory.forEach { memDto ->
+            val source = try { MemorySource.valueOf(memDto.source) } catch (_: Exception) { MemorySource.MANUAL }
+            session.workingMemory.add(MemoryItem(id = memDto.id, content = memDto.content, source = source, timestamp = memDto.timestamp))
+        }
+
+        // Migration: if old stickyFacts exist and no working memory was stored, migrate
+        if (session.workingMemory.isEmpty()) {
+            dto.chats.forEach { chatDto ->
+                if (chatDto.stickyFacts.isNotBlank()) {
+                    chatDto.stickyFacts.lines()
+                        .map { it.trimStart('-', ' ') }
+                        .filter { it.isNotBlank() }
+                        .forEach { fact ->
+                            session.workingMemory.add(
+                                MemoryItem(
+                                    id = buildMemoryId(),
+                                    content = fact,
+                                    source = MemorySource.AUTO_EXTRACTED,
+                                    timestamp = 0L
+                                )
+                            )
+                        }
+                }
+            }
+        }
+
         return session
     }
 }

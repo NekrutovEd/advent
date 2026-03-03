@@ -25,6 +25,9 @@ class AppState(
     var activeSessionIndex by mutableStateOf(0)
     var showSettings by mutableStateOf(false)
 
+    val longTermMemory = mutableStateListOf<MemoryItem>()
+    var showMemoryPanel by mutableStateOf(false)
+
     init {
         sessions.add(createNewSession())
     }
@@ -32,9 +35,56 @@ class AppState(
     val activeSession: SessionState get() = sessions[activeSessionIndex]
     val isBusy: Boolean get() = activeSession.isBusy
 
+    fun currentTimeMs(): Long = storage.currentTimeMs()
+
+    fun addLongTermMemoryItem(content: String, source: MemorySource, timestamp: Long): MemoryItem {
+        val item = MemoryItem(id = buildMemoryId(), content = content, source = source, timestamp = timestamp)
+        longTermMemory.add(item)
+        return item
+    }
+
+    fun removeLongTermMemoryItem(itemId: String) {
+        longTermMemory.removeAll { it.id == itemId }
+    }
+
+    fun updateLongTermMemoryItem(itemId: String, newContent: String) {
+        val index = longTermMemory.indexOfFirst { it.id == itemId }
+        if (index >= 0) {
+            longTermMemory[index] = longTermMemory[index].copy(content = newContent)
+        }
+    }
+
+    fun longTermMemoryText(): String =
+        longTermMemory.joinToString("\n") { "- ${it.content}" }
+
+    fun promoteToLongTerm(session: SessionState, itemId: String, timestamp: Long) {
+        val index = session.workingMemory.indexOfFirst { it.id == itemId }
+        if (index < 0) return
+        val item = session.workingMemory[index]
+        session.workingMemory.removeAt(index)
+        addLongTermMemoryItem(item.content, MemorySource.PROMOTED, timestamp)
+    }
+
     // Delegates to active session
-    fun sendToAll(prompt: String, scope: CoroutineScope): List<Job> = activeSession.sendToAll(prompt, scope)
-    fun sendToOne(chat: ChatState, prompt: String, scope: CoroutineScope): Job? = activeSession.sendToOne(chat, prompt, scope)
+    fun sendToAll(prompt: String, scope: CoroutineScope): List<Job> =
+        activeSession.sendToAll(
+            prompt, scope,
+            longTermMemoryText = longTermMemoryText(),
+            timestamp = currentTimeMs(),
+            onLongTermExtracted = { items ->
+                items.forEach { addLongTermMemoryItem(it, MemorySource.AUTO_EXTRACTED, currentTimeMs()) }
+            }
+        )
+
+    fun sendToOne(chat: ChatState, prompt: String, scope: CoroutineScope): Job? =
+        activeSession.sendToOne(
+            chat, prompt, scope,
+            longTermMemoryText = longTermMemoryText(),
+            timestamp = currentTimeMs(),
+            onLongTermExtracted = { items ->
+                items.forEach { addLongTermMemoryItem(it, MemorySource.AUTO_EXTRACTED, currentTimeMs()) }
+            }
+        )
 
     // Session management
     fun addSession() {
@@ -107,6 +157,12 @@ class AppState(
                 archivedSessions.add(archived)
             }
         }
+
+        // Restore long-term memory
+        dto.longTermMemory.forEach { memDto ->
+            val source = try { MemorySource.valueOf(memDto.source) } catch (_: Exception) { MemorySource.MANUAL }
+            longTermMemory.add(MemoryItem(id = memDto.id, content = memDto.content, source = source, timestamp = memDto.timestamp))
+        }
     }
 
     /** Auto-renames a "New" session using the cheapest available model. */
@@ -142,8 +198,8 @@ class AppState(
                     jsonSchema = null
                 )
                 val name = response.content.trim()
-                    .trimStart('"', '\'', '«', '\u201C')
-                    .trimEnd('"', '\'', '»', '\u201D', '.', ',', '!')
+                    .trimStart('"', '\'', '\u00AB', '\u201C')
+                    .trimEnd('"', '\'', '\u00BB', '\u201D', '.', ',', '!')
                     .trim()
                     .take(50)
                 if (name.isNotBlank() && sessionIndex in sessions.indices && sessions[sessionIndex].name == "New") {

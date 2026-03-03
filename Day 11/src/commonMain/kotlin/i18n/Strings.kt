@@ -51,6 +51,21 @@ interface Strings {
     val extractingFacts: String
     val stickyFactsLabel: String
     val stickyFactsPlaceholder: String
+    val extractMemory: String
+    val extractingMemory: String
+
+    // Memory panel
+    val memoryPanelTitle: String
+    val shortTermMemoryTab: String
+    val workingMemoryTab: String
+    val longTermMemoryTab: String
+    val addMemoryPlaceholder: String
+    val promoteToLongTerm: String
+    val noMemoryItems: String
+    val memorySourceAuto: String
+    val memorySourceManual: String
+    val memorySourcePromoted: String
+    val shortTermReadOnly: String
     fun summaryCountLabel(n: Int): String
     fun requestHistoryLabel(n: Int): String
 

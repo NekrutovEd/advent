@@ -21,7 +21,7 @@ private class ContextDraft(settings: SettingsState) {
     var threshold by mutableStateOf(settings.defaultSummarizeThreshold)
     var keepLast by mutableStateOf(settings.defaultKeepLastMessages)
     var slidingWindow by mutableStateOf(settings.defaultSlidingWindow)
-    var extractFacts by mutableStateOf(settings.defaultExtractFacts)
+    var extractMemory by mutableStateOf(settings.defaultExtractMemory)
 }
 
 private class ApiConfigDraft(config: ApiConfig) {
@@ -127,10 +127,10 @@ fun SettingsDialog(
                     horizontalArrangement = Arrangement.spacedBy(8.dp)
                 ) {
                     Switch(
-                        checked = contextDraft.extractFacts,
-                        onCheckedChange = { contextDraft.extractFacts = it }
+                        checked = contextDraft.extractMemory,
+                        onCheckedChange = { contextDraft.extractMemory = it }
                     )
-                    Text(s.extractFacts, style = MaterialTheme.typography.bodyMedium)
+                    Text(s.extractMemory, style = MaterialTheme.typography.bodyMedium)
                 }
 
                 HorizontalDivider()
@@ -239,7 +239,7 @@ fun SettingsDialog(
                 settings.defaultSummarizeThreshold = contextDraft.threshold
                 settings.defaultKeepLastMessages = contextDraft.keepLast
                 settings.defaultSlidingWindow = contextDraft.slidingWindow
-                settings.defaultExtractFacts = contextDraft.extractFacts
+                settings.defaultExtractMemory = contextDraft.extractMemory
                 settings.apiConfigs.forEachIndexed { index, config ->
                     val draft = drafts[index]
                     config.apiKey = draft.apiKey

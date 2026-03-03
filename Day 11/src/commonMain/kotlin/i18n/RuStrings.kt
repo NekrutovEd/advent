@@ -51,6 +51,21 @@ object RuStrings : Strings {
     override val extractingFacts = "Извлечение фактов..."
     override val stickyFactsLabel = "Ключевые факты"
     override val stickyFactsPlaceholder = "Ключевые факты из диалога..."
+    override val extractMemory = "Извлекать память"
+    override val extractingMemory = "Извлечение памяти..."
+
+    // Memory panel
+    override val memoryPanelTitle = "Память"
+    override val shortTermMemoryTab = "Кратковр."
+    override val workingMemoryTab = "Рабочая"
+    override val longTermMemoryTab = "Долговр."
+    override val addMemoryPlaceholder = "Добавить элемент..."
+    override val promoteToLongTerm = "В долговременную"
+    override val noMemoryItems = "Нет элементов"
+    override val memorySourceAuto = "авто"
+    override val memorySourceManual = "вручную"
+    override val memorySourcePromoted = "повышен"
+    override val shortTermReadOnly = "Последние сообщения (только чтение)"
     override fun summaryCountLabel(n: Int) = "Саммари создано: $n"
     override fun requestHistoryLabel(n: Int) = "История ($n сообщений)"
 

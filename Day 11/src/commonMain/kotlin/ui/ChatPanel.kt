@@ -256,35 +256,23 @@ fun ChatPanel(
                     )
                 }
 
-                // Extract Facts toggle
+                // Extract Memory toggle
                 Row(
                     verticalAlignment = Alignment.CenterVertically,
                     modifier = Modifier.padding(top = 4.dp)
                 ) {
                     Switch(
-                        checked = chatState.extractFacts,
-                        onCheckedChange = { chatState.extractFacts = it }
+                        checked = chatState.extractMemory,
+                        onCheckedChange = { chatState.extractMemory = it }
                     )
                     Spacer(Modifier.width(8.dp))
-                    Text(s.extractFacts, style = MaterialTheme.typography.bodyMedium)
+                    Text(s.extractMemory, style = MaterialTheme.typography.bodyMedium)
                 }
 
-                // Editable facts text area
-                if (chatState.extractFacts) {
-                    OutlinedTextField(
-                        value = chatState.stickyFacts,
-                        onValueChange = { chatState.stickyFacts = it },
-                        label = { Text(s.stickyFactsLabel, style = MaterialTheme.typography.labelSmall) },
-                        placeholder = { Text(s.stickyFactsPlaceholder) },
-                        modifier = Modifier.fillMaxWidth().heightIn(min = 60.dp),
-                        maxLines = 5
-                    )
-                }
-
-                // Extracting facts indicator
-                if (chatState.isExtractingFacts) {
+                // Extracting memory indicator
+                if (chatState.isExtractingMemory) {
                     Text(
-                        s.extractingFacts,
+                        s.extractingMemory,
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.outline,
                         modifier = Modifier.padding(top = 2.dp)

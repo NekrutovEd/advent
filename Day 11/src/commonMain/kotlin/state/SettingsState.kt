@@ -19,9 +19,10 @@ class SettingsState {
     var defaultSummarizeThreshold by mutableStateOf("10")
     var defaultKeepLastMessages by mutableStateOf("4")
 
-    // Global sliding window + sticky facts defaults
+    // Global sliding window + memory defaults
     var defaultSlidingWindow by mutableStateOf("")
-    var defaultExtractFacts by mutableStateOf(false)
+    var defaultExtractMemory by mutableStateOf(false)
+    val defaultExtractFacts get() = defaultExtractMemory
 
     val apiConfigs = mutableStateListOf(
         ApiConfig(

@@ -67,6 +67,9 @@ fun App(appState: AppState) {
                             onClearArchive = { appState.clearArchive() },
                             modifier = Modifier.weight(1f)
                         )
+                        TextButton(onClick = { appState.showMemoryPanel = !appState.showMemoryPanel }) {
+                            Text(s.memoryPanelTitle)
+                        }
                         TextButton(onClick = { appState.showSettings = true }) {
                             Text("\u2699 ${s.settingsTitle}")
                         }
@@ -137,56 +140,75 @@ fun App(appState: AppState) {
 
                     // Dynamic chat area with minimum width and horizontal scroll
                     val activeSession = appState.activeSession
-                    BoxWithConstraints(modifier = Modifier.weight(1f).fillMaxWidth()) {
-                        val chatCount = activeSession.chats.size.coerceAtLeast(1)
-                        val scrollAreaWidth = maxWidth - 48.dp
-                        val chatWidth = maxOf(scrollAreaWidth - 28.dp, scrollAreaWidth / chatCount)
+                    Row(modifier = Modifier.weight(1f).fillMaxWidth()) {
+                        BoxWithConstraints(modifier = Modifier.weight(1f).fillMaxHeight()) {
+                            val chatCount = activeSession.chats.size.coerceAtLeast(1)
+                            val scrollAreaWidth = maxWidth - 48.dp
+                            val chatWidth = maxOf(scrollAreaWidth - 28.dp, scrollAreaWidth / chatCount)
 
-                        Row(modifier = Modifier.fillMaxSize()) {
-                            // Scrollable chats
-                            Row(
-                                modifier = Modifier
-                                    .weight(1f)
-                                    .fillMaxHeight()
-                                    .horizontalScroll(rememberScrollState())
-                            ) {
-                                activeSession.chats.forEachIndexed { index, chatState ->
-                                    if (index > 0) {
-                                        VerticalDivider()
+                            Row(modifier = Modifier.fillMaxSize()) {
+                                // Scrollable chats
+                                Row(
+                                    modifier = Modifier
+                                        .weight(1f)
+                                        .fillMaxHeight()
+                                        .horizontalScroll(rememberScrollState())
+                                ) {
+                                    activeSession.chats.forEachIndexed { index, chatState ->
+                                        if (index > 0) {
+                                            VerticalDivider()
+                                        }
+
+                                        ChatColumn(
+                                            title = s.chatTitle(index),
+                                            chatState = chatState,
+                                            prompt = prompt,
+                                            onSend = {
+                                                val session = appState.activeSession
+                                                val isFirst = session.chats.all { it.messages.isEmpty() }
+                                                val sessionIdx = appState.activeSessionIndex
+                                                val capturedPrompt = prompt
+                                                appState.sendToOne(chatState, capturedPrompt, scope)
+                                                if (isFirst && session.name == "New") {
+                                                    appState.autoRenameSession(sessionIdx, capturedPrompt, scope)
+                                                }
+                                            },
+                                            enabled = !chatState.isLoading && hasApiKey,
+                                            onClone = { activeSession.cloneChat(index) },
+                                            onDrop = if (index > 0) {{ activeSession.removeChat(index) }} else null,
+                                            availableModels = appState.settings.allModels(),
+                                            globalModel = appState.settings.selectedModel,
+                                            modifier = Modifier.width(350.dp).fillMaxHeight()
+                                        )
                                     }
+                                }
 
-                                    ChatColumn(
-                                        title = s.chatTitle(index),
-                                        chatState = chatState,
-                                        prompt = prompt,
-                                        onSend = {
-                                            val session = appState.activeSession
-                                            val isFirst = session.chats.all { it.messages.isEmpty() }
-                                            val sessionIdx = appState.activeSessionIndex
-                                            val capturedPrompt = prompt
-                                            appState.sendToOne(chatState, capturedPrompt, scope)
-                                            if (isFirst && session.name == "New") {
-                                                appState.autoRenameSession(sessionIdx, capturedPrompt, scope)
-                                            }
-                                        },
-                                        enabled = !chatState.isLoading && hasApiKey,
-                                        onClone = { activeSession.cloneChat(index) },
-                                        onDrop = if (index > 0) {{ activeSession.removeChat(index) }} else null,
-                                        availableModels = appState.settings.allModels(),
-                                        globalModel = appState.settings.selectedModel,
-                                        modifier = Modifier.width(350.dp).fillMaxHeight()
-                                    )
+                                // Add chat button — always visible outside scroll
+                                VerticalDivider()
+                                TextButton(
+                                    onClick = { activeSession.addChat() },
+                                    modifier = Modifier.fillMaxHeight().width(48.dp)
+                                ) {
+                                    Text("+", style = MaterialTheme.typography.headlineMedium)
                                 }
                             }
+                        }
 
-                            // Add chat button — always visible outside scroll
+                        if (appState.showMemoryPanel) {
                             VerticalDivider()
-                            TextButton(
-                                onClick = { activeSession.addChat() },
-                                modifier = Modifier.fillMaxHeight().width(48.dp)
-                            ) {
-                                Text("+", style = MaterialTheme.typography.headlineMedium)
-                            }
+                            MemoryPanel(
+                                shortTermMessages = activeSession.chats.flatMap { it.messages }.takeLast(10),
+                                workingMemory = activeSession.workingMemory,
+                                longTermMemory = appState.longTermMemory,
+                                onAddWorkingItem = { activeSession.addWorkingMemoryItem(it, state.MemorySource.MANUAL, appState.currentTimeMs()) },
+                                onRemoveWorkingItem = { activeSession.removeWorkingMemoryItem(it) },
+                                onEditWorkingItem = { id, text -> activeSession.updateWorkingMemoryItem(id, text) },
+                                onAddLongTermItem = { appState.addLongTermMemoryItem(it, state.MemorySource.MANUAL, appState.currentTimeMs()) },
+                                onRemoveLongTermItem = { appState.removeLongTermMemoryItem(it) },
+                                onEditLongTermItem = { id, text -> appState.updateLongTermMemoryItem(id, text) },
+                                onPromoteItem = { appState.promoteToLongTerm(activeSession, it, appState.currentTimeMs()) },
+                                modifier = Modifier.width(280.dp).fillMaxHeight()
+                            )
                         }
                     }
                 }

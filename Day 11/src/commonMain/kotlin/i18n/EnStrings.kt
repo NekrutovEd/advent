@@ -51,6 +51,21 @@ object EnStrings : Strings {
     override val extractingFacts = "Extracting facts..."
     override val stickyFactsLabel = "Key facts"
     override val stickyFactsPlaceholder = "Key facts extracted from conversation..."
+    override val extractMemory = "Extract memory"
+    override val extractingMemory = "Extracting memory..."
+
+    // Memory panel
+    override val memoryPanelTitle = "Memory"
+    override val shortTermMemoryTab = "Short-term"
+    override val workingMemoryTab = "Working"
+    override val longTermMemoryTab = "Long-term"
+    override val addMemoryPlaceholder = "Add memory item..."
+    override val promoteToLongTerm = "Promote to long-term"
+    override val noMemoryItems = "No memory items"
+    override val memorySourceAuto = "auto"
+    override val memorySourceManual = "manual"
+    override val memorySourcePromoted = "promoted"
+    override val shortTermReadOnly = "Recent messages (read-only)"
     override fun summaryCountLabel(n: Int) = "Summaries made: $n"
     override fun requestHistoryLabel(n: Int) = "History ($n messages)"
 

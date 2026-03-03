@@ -8,6 +8,15 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import kotlin.random.Random
+import kotlinx.serialization.json.Json
+import kotlinx.serialization.json.jsonObject
+import kotlinx.serialization.json.jsonArray
+import kotlinx.serialization.json.jsonPrimitive
+
+data class ExtractedMemoryResult(
+    val workingItems: List<String>,
+    val longTermItems: List<String>
+)
 
 class ChatState(
     private val chatApi: ChatApiInterface,
@@ -16,7 +25,7 @@ class ChatState(
     defaultSummarizeThreshold: String = "10",
     defaultKeepLastMessages: String = "4",
     defaultSlidingWindow: String = "",
-    defaultExtractFacts: Boolean = false,
+    defaultExtractMemory: Boolean = false,
     id: String? = null
 ) {
     val id: String = id ?: buildId()
@@ -51,10 +60,9 @@ class ChatState(
     // Sliding Window
     var slidingWindow by mutableStateOf(defaultSlidingWindow)
 
-    // Sticky Facts
-    var extractFacts by mutableStateOf(defaultExtractFacts)
-    var stickyFacts by mutableStateOf("")
-    var isExtractingFacts by mutableStateOf(false)
+    // Memory extraction (replaces sticky facts)
+    var extractMemory by mutableStateOf(defaultExtractMemory)
+    var isExtractingMemory by mutableStateOf(false)
 
     private val history = mutableListOf<ChatMessage>()
 
@@ -71,6 +79,8 @@ class ChatState(
             val h = v.toString(16)
             if (h.length == 1) "0$h" else h
         }
+
+        val memoryJson = Json { ignoreUnknownKeys = true }
     }
 
     fun toggleOption(option: ChatOption) {
@@ -109,8 +119,7 @@ class ChatState(
                 summarizeThreshold = "10"
                 keepLastMessages = "4"
                 slidingWindow = ""
-                extractFacts = false
-                stickyFacts = ""
+                extractMemory = false
             }
         }
     }
@@ -214,34 +223,31 @@ class ChatState(
         return systemMsgs + windowed
     }
 
-    suspend fun extractFactsIfNeeded(
+    suspend fun extractMemoryIfNeeded(
         apiKey: String,
         model: String,
         temperature: Double?,
         connectTimeoutSec: Int?,
         readTimeoutSec: Int?,
         baseUrl: String? = null
-    ) {
-        if (!extractFacts) return
-        // Need at least one user+assistant exchange
+    ): ExtractedMemoryResult? {
+        if (!extractMemory) return null
         val conversational = history.filter { it.role == "user" || it.role == "assistant" }
-        if (conversational.size < 2) return
+        if (conversational.size < 2) return null
 
-        isExtractingFacts = true
+        isExtractingMemory = true
         try {
             val lastExchange = conversational.takeLast(2)
             val prompt = buildString {
-                if (stickyFacts.isNotBlank()) {
-                    appendLine("Current key facts:")
-                    appendLine(stickyFacts)
-                    appendLine()
-                }
                 appendLine("Latest exchange:")
                 lastExchange.forEach { msg ->
                     appendLine("${msg.role}: ${msg.content}")
                 }
                 appendLine()
-                appendLine("Update the key facts list. Keep it concise — only important facts, decisions, preferences, and context. Remove outdated facts. Return only the updated facts list, no extra commentary.")
+                appendLine("Extract any important facts, decisions, or preferences from this exchange.")
+                appendLine("Classify each fact as either \"working\" (relevant to the current task/session) or \"long_term\" (general user preference or enduring fact).")
+                appendLine("Return JSON: {\"working\": [\"fact1\", ...], \"long_term\": [\"fact1\", ...]}")
+                appendLine("If no facts are worth extracting, return {\"working\": [], \"long_term\": []}")
             }
 
             val response = chatApi.sendMessage(
@@ -250,20 +256,24 @@ class ChatState(
                 model = model,
                 temperature = temperature,
                 maxTokens = 500,
-                systemPrompt = "You extract and maintain a concise list of key facts from conversations. Output only the facts list.",
+                systemPrompt = "You extract facts from conversations and classify them. Output only valid JSON.",
                 connectTimeoutSec = connectTimeoutSec,
                 readTimeoutSec = readTimeoutSec,
                 stop = null,
-                responseFormat = null,
+                responseFormat = "json_object",
                 jsonSchema = null,
                 baseUrl = baseUrl
             )
 
-            stickyFacts = response.content.trim()
+            val jsonElement = memoryJson.parseToJsonElement(response.content.trim())
+            val obj = jsonElement.jsonObject
+            val working = obj["working"]?.jsonArray?.map { it.jsonPrimitive.content } ?: emptyList()
+            val longTerm = obj["long_term"]?.jsonArray?.map { it.jsonPrimitive.content } ?: emptyList()
+            return ExtractedMemoryResult(working, longTerm)
         } catch (_: Exception) {
-            // Silently ignore extraction failures
+            return null
         } finally {
-            isExtractingFacts = false
+            isExtractingMemory = false
         }
     }
 
@@ -279,7 +289,10 @@ class ChatState(
         stop: List<String>? = null,
         responseFormat: String? = null,
         jsonSchema: String? = null,
-        baseUrl: String? = null
+        baseUrl: String? = null,
+        workingMemoryText: String = "",
+        longTermMemoryText: String = "",
+        onMemoryExtracted: (suspend (ExtractedMemoryResult) -> Unit)? = null
     ) {
         isLoading = true
         error = null
@@ -290,16 +303,13 @@ class ChatState(
 
         val snapshotHistory = if (sendHistory) applySlidingWindow(history.toList()) else emptyList()
 
-        // Prepend sticky facts as system message in snapshot
-        val snapshotWithFacts = if (stickyFacts.isNotBlank()) {
-            listOf(ChatMessage("system", "[Context Facts]\n$stickyFacts")) + snapshotHistory
-        } else {
-            snapshotHistory
-        }
+        // Prepend memory as system messages in snapshot
+        val memoryPreamble = buildMemoryPreamble(longTermMemoryText, workingMemoryText)
+        val snapshotWithMemory = memoryPreamble + snapshotHistory
 
         val snapshot = try {
             chatApi.buildSnapshot(
-                history = snapshotWithFacts,
+                history = snapshotWithMemory,
                 model = model,
                 temperature = temperature,
                 maxTokens = maxTokens,
@@ -320,12 +330,8 @@ class ChatState(
             val fullHistory = if (sendHistory) history.toList() else listOf(history.last())
             val windowedHistory = if (sendHistory) applySlidingWindow(fullHistory) else fullHistory
 
-            // Prepend sticky facts
-            val apiHistory = if (stickyFacts.isNotBlank()) {
-                listOf(ChatMessage("system", "[Context Facts]\n$stickyFacts")) + windowedHistory
-            } else {
-                windowedHistory
-            }
+            // Prepend memory
+            val apiHistory = buildMemoryPreamble(longTermMemoryText, workingMemoryText) + windowedHistory
 
             val response = chatApi.sendMessage(
                 history = apiHistory,
@@ -352,14 +358,28 @@ class ChatState(
                 totalTokens += response.usage.totalTokens
             }
 
-            // Extract facts after successful response
-            extractFactsIfNeeded(apiKey, model, temperature, connectTimeoutSec, readTimeoutSec, baseUrl)
+            // Extract memory after successful response
+            val result = extractMemoryIfNeeded(apiKey, model, temperature, connectTimeoutSec, readTimeoutSec, baseUrl)
+            if (result != null) {
+                onMemoryExtracted?.invoke(result)
+            }
         } catch (e: Exception) {
             error = e.message ?: "Unknown error"
             if (history.isNotEmpty()) history.removeLast()
             messages.removeLastOrNull()
         } finally {
             isLoading = false
+        }
+    }
+
+    private fun buildMemoryPreamble(longTermMemoryText: String, workingMemoryText: String): List<ChatMessage> {
+        return buildList {
+            if (longTermMemoryText.isNotBlank()) {
+                add(ChatMessage("system", "[User Profile]\n$longTermMemoryText"))
+            }
+            if (workingMemoryText.isNotBlank()) {
+                add(ChatMessage("system", "[Task Context]\n$workingMemoryText"))
+            }
         }
     }
 
@@ -374,7 +394,6 @@ class ChatState(
         totalPromptTokens = 0
         totalCompletionTokens = 0
         totalTokens = 0
-        stickyFacts = ""
-        isExtractingFacts = false
+        isExtractingMemory = false
     }
 }
