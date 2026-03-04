@@ -54,20 +54,37 @@ object EnStrings : Strings {
     override val extractMemory = "Extract memory"
     override val extractingMemory = "Extracting memory..."
 
+    // Profile selector
+    override val profileSectionTitle = "Profile"
+    override val noProfileSelected = "No profile"
+    override val renameProfile = "Rename"
+    override val addProfileItemPlaceholder = "Add preference..."
+    override val noProfileItems = "No preferences"
+
     // Memory panel
     override val memoryPanelTitle = "Memory"
-    override val shortTermMemoryTab = "Short-term"
-    override val workingMemoryTab = "Working"
-    override val longTermMemoryTab = "Long-term"
+    override val sessionMemoryTab = "Session"
+    override val globalMemoryTab = "Global"
     override val addMemoryPlaceholder = "Add memory item..."
-    override val promoteToLongTerm = "Promote to long-term"
+    override val moveToGlobal = "Move to Global"
     override val noMemoryItems = "No memory items"
     override val memorySourceAuto = "auto"
     override val memorySourceManual = "manual"
     override val memorySourcePromoted = "promoted"
-    override val shortTermReadOnly = "Recent messages (read-only)"
+    override val sessionMemoryScopeLabel = "this session only"
+    override val globalMemoryScopeLabel = "persists across sessions"
+    override fun memoryTokenEstimate(tokens: Int) = "~$tokens tokens injected"
     override fun summaryCountLabel(n: Int) = "Summaries made: $n"
     override fun requestHistoryLabel(n: Int) = "History ($n messages)"
+
+    // Profile dialog
+    override val profileDialogTitle = "Edit Profiles"
+    override val editProfile = "Edit"
+    override val deleteProfileConfirmTitle = "Delete Profile"
+    override fun deleteProfileConfirmBody(name: String) = "Delete profile \"$name\"?"
+    override val confirm = "Delete"
+    override val addProfile = "Add Profile"
+    override val profileItemsHeader = "Preferences"
 
     // Statistics tooltip
     override val lastRequest = "Last request"

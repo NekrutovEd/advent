@@ -50,9 +50,19 @@ data class SessionDto(
 data class ArchivedSessionDto(val id: String, val name: String, val json: String, val timestamp: Long = 0L)
 
 @Serializable
+data class UserProfileDto(
+    val id: String,
+    val name: String,
+    val items: List<String>,
+    val isNameCustom: Boolean = false
+)
+
+@Serializable
 data class AppStateDto(
     val activeSessionIndex: Int,
     val sessions: List<SessionDto>,
     val archivedSessions: List<ArchivedSessionDto>,
-    val longTermMemory: List<MemoryItemDto> = emptyList()
+    val longTermMemory: List<MemoryItemDto> = emptyList(),
+    val profiles: List<UserProfileDto> = emptyList(),
+    val activeProfileId: String? = null
 )

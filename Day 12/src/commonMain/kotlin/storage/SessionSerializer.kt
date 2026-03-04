@@ -6,6 +6,7 @@ import state.AppState
 import state.MemoryItem
 import state.MemorySource
 import state.SessionState
+import state.UserProfile
 import state.buildMemoryId
 
 object SessionSerializer {
@@ -16,7 +17,9 @@ object SessionSerializer {
             activeSessionIndex = appState.activeSessionIndex,
             sessions = appState.sessions.map { encodeSessionToDto(it) },
             archivedSessions = appState.archivedSessions.toList(),
-            longTermMemory = appState.longTermMemory.map { MemoryItemDto(it.id, it.content, it.source.name, it.timestamp) }
+            longTermMemory = appState.longTermMemory.map { MemoryItemDto(it.id, it.content, it.source.name, it.timestamp) },
+            profiles = appState.profiles.map { UserProfileDto(it.id, it.name, it.items.toList(), it.isNameCustom) },
+            activeProfileId = appState.activeProfileId
         )
         return json.encodeToString(dto)
     }
@@ -40,6 +43,18 @@ object SessionSerializer {
                 val source = try { MemorySource.valueOf(memDto.source) } catch (_: Exception) { MemorySource.MANUAL }
                 appState.longTermMemory.add(MemoryItem(id = memDto.id, content = memDto.content, source = source, timestamp = memDto.timestamp))
             }
+
+            // Restore profiles
+            appState.profiles.clear()
+            dto.profiles.forEach { profileDto ->
+                appState.profiles.add(UserProfile(
+                    id = profileDto.id,
+                    name = profileDto.name,
+                    items = profileDto.items,
+                    isNameCustom = profileDto.isNameCustom
+                ))
+            }
+            appState.activeProfileId = dto.activeProfileId
         } catch (_: Exception) {
             // Leave state as-is on parse failure
         }

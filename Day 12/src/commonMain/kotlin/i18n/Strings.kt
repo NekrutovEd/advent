@@ -54,20 +54,37 @@ interface Strings {
     val extractMemory: String
     val extractingMemory: String
 
+    // Profile selector
+    val profileSectionTitle: String
+    val noProfileSelected: String
+    val renameProfile: String
+    val addProfileItemPlaceholder: String
+    val noProfileItems: String
+
     // Memory panel
     val memoryPanelTitle: String
-    val shortTermMemoryTab: String
-    val workingMemoryTab: String
-    val longTermMemoryTab: String
+    val sessionMemoryTab: String
+    val globalMemoryTab: String
     val addMemoryPlaceholder: String
-    val promoteToLongTerm: String
+    val moveToGlobal: String
     val noMemoryItems: String
     val memorySourceAuto: String
     val memorySourceManual: String
     val memorySourcePromoted: String
-    val shortTermReadOnly: String
+    val sessionMemoryScopeLabel: String
+    val globalMemoryScopeLabel: String
+    fun memoryTokenEstimate(tokens: Int): String
     fun summaryCountLabel(n: Int): String
     fun requestHistoryLabel(n: Int): String
+
+    // Profile dialog
+    val profileDialogTitle: String
+    val editProfile: String
+    val deleteProfileConfirmTitle: String
+    fun deleteProfileConfirmBody(name: String): String
+    val confirm: String
+    val addProfile: String
+    val profileItemsHeader: String
 
     // Statistics tooltip
     val lastRequest: String

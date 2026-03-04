@@ -177,7 +177,7 @@ class MemoryTest {
         val body = JSONObject(req.body.readUtf8())
         val msgs = body.getJSONArray("messages")
         assertEquals("system", msgs.getJSONObject(0).getString("role"))
-        assertTrue(msgs.getJSONObject(0).getString("content").contains("[User Profile]"))
+        assertTrue(msgs.getJSONObject(0).getString("content").contains("[Long-Term Memory]"))
         assertTrue(msgs.getJSONObject(0).getString("content").contains("long term fact"))
     }
 
@@ -200,7 +200,7 @@ class MemoryTest {
         val msgs = body.getJSONArray("messages")
         // Long-term first, then working, then user
         assertEquals("system", msgs.getJSONObject(0).getString("role"))
-        assertTrue(msgs.getJSONObject(0).getString("content").contains("[User Profile]"))
+        assertTrue(msgs.getJSONObject(0).getString("content").contains("[Long-Term Memory]"))
         assertEquals("system", msgs.getJSONObject(1).getString("role"))
         assertTrue(msgs.getJSONObject(1).getString("content").contains("[Task Context]"))
         assertEquals("user", msgs.getJSONObject(2).getString("role"))

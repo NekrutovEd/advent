@@ -7,6 +7,7 @@ import androidx.compose.runtime.mutableStateListOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
+import i18n.Lang
 import kotlin.random.Random
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.jsonObject
@@ -229,7 +230,8 @@ class ChatState(
         temperature: Double?,
         connectTimeoutSec: Int?,
         readTimeoutSec: Int?,
-        baseUrl: String? = null
+        baseUrl: String? = null,
+        lang: Lang = Lang.EN
     ): ExtractedMemoryResult? {
         if (!extractMemory) return null
         val conversational = history.filter { it.role == "user" || it.role == "assistant" }
@@ -238,6 +240,10 @@ class ChatState(
         isExtractingMemory = true
         try {
             val lastExchange = conversational.takeLast(2)
+            val langInstruction = when (lang) {
+                Lang.EN -> "Write extracted facts in English."
+                Lang.RU -> "Write extracted facts in Russian (на русском языке)."
+            }
             val prompt = buildString {
                 appendLine("Latest exchange:")
                 lastExchange.forEach { msg ->
@@ -245,6 +251,7 @@ class ChatState(
                 }
                 appendLine()
                 appendLine("Extract any important facts, decisions, or preferences from this exchange.")
+                appendLine(langInstruction)
                 appendLine("Classify each fact as either \"working\" (relevant to the current task/session) or \"long_term\" (general user preference or enduring fact).")
                 appendLine("Return JSON: {\"working\": [\"fact1\", ...], \"long_term\": [\"fact1\", ...]}")
                 appendLine("If no facts are worth extracting, return {\"working\": [], \"long_term\": []}")
@@ -292,6 +299,8 @@ class ChatState(
         baseUrl: String? = null,
         workingMemoryText: String = "",
         longTermMemoryText: String = "",
+        profileText: String = "",
+        lang: Lang = Lang.EN,
         onMemoryExtracted: (suspend (ExtractedMemoryResult) -> Unit)? = null
     ) {
         isLoading = true
@@ -304,7 +313,7 @@ class ChatState(
         val snapshotHistory = if (sendHistory) applySlidingWindow(history.toList()) else emptyList()
 
         // Prepend memory as system messages in snapshot
-        val memoryPreamble = buildMemoryPreamble(longTermMemoryText, workingMemoryText)
+        val memoryPreamble = buildMemoryPreamble(profileText, longTermMemoryText, workingMemoryText)
         val snapshotWithMemory = memoryPreamble + snapshotHistory
 
         val snapshot = try {
@@ -331,7 +340,7 @@ class ChatState(
             val windowedHistory = if (sendHistory) applySlidingWindow(fullHistory) else fullHistory
 
             // Prepend memory
-            val apiHistory = buildMemoryPreamble(longTermMemoryText, workingMemoryText) + windowedHistory
+            val apiHistory = buildMemoryPreamble(profileText, longTermMemoryText, workingMemoryText) + windowedHistory
 
             val response = chatApi.sendMessage(
                 history = apiHistory,
@@ -359,7 +368,7 @@ class ChatState(
             }
 
             // Extract memory after successful response
-            val result = extractMemoryIfNeeded(apiKey, model, temperature, connectTimeoutSec, readTimeoutSec, baseUrl)
+            val result = extractMemoryIfNeeded(apiKey, model, temperature, connectTimeoutSec, readTimeoutSec, baseUrl, lang)
             if (result != null) {
                 onMemoryExtracted?.invoke(result)
             }
@@ -372,10 +381,13 @@ class ChatState(
         }
     }
 
-    private fun buildMemoryPreamble(longTermMemoryText: String, workingMemoryText: String): List<ChatMessage> {
+    private fun buildMemoryPreamble(profileText: String, longTermMemoryText: String, workingMemoryText: String): List<ChatMessage> {
         return buildList {
+            if (profileText.isNotBlank()) {
+                add(ChatMessage("system", "[Active Profile]\n$profileText"))
+            }
             if (longTermMemoryText.isNotBlank()) {
-                add(ChatMessage("system", "[User Profile]\n$longTermMemoryText"))
+                add(ChatMessage("system", "[Long-Term Memory]\n$longTermMemoryText"))
             }
             if (workingMemoryText.isNotBlank()) {
                 add(ChatMessage("system", "[Task Context]\n$workingMemoryText"))

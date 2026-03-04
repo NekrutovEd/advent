@@ -28,6 +28,10 @@ class AppState(
     val longTermMemory = mutableStateListOf<MemoryItem>()
     var showMemoryPanel by mutableStateOf(false)
 
+    // User profiles
+    val profiles = mutableStateListOf<UserProfile>()
+    var activeProfileId by mutableStateOf<String?>(null)
+
     init {
         sessions.add(createNewSession())
     }
@@ -57,6 +61,65 @@ class AppState(
     fun longTermMemoryText(): String =
         longTermMemory.joinToString("\n") { "- ${it.content}" }
 
+    // Profile CRUD
+    fun addProfile(): UserProfile {
+        val profile = UserProfile.create(profiles.size)
+        profiles.add(profile)
+        if (activeProfileId == null) activeProfileId = profile.id
+        return profile
+    }
+
+    fun removeProfile(id: String) {
+        profiles.removeAll { it.id == id }
+        if (activeProfileId == id) {
+            activeProfileId = profiles.firstOrNull()?.id
+        }
+    }
+
+    fun selectProfile(id: String?) {
+        activeProfileId = id
+    }
+
+    fun renameProfile(id: String, name: String) {
+        profiles.firstOrNull { it.id == id }?.let {
+            it.name = name
+            it.isNameCustom = true
+        }
+    }
+
+    fun addProfileItem(id: String, content: String) {
+        val profile = profiles.firstOrNull { it.id == id } ?: return
+        profile.items.add(content)
+        if (!profile.isNameCustom) {
+            profile.name = UserProfile.generateAutoName(profile.items, profiles.indexOf(profile))
+        }
+    }
+
+    fun removeProfileItem(id: String, index: Int) {
+        val profile = profiles.firstOrNull { it.id == id } ?: return
+        if (index in profile.items.indices) {
+            profile.items.removeAt(index)
+            if (!profile.isNameCustom) {
+                profile.name = UserProfile.generateAutoName(profile.items, profiles.indexOf(profile))
+            }
+        }
+    }
+
+    fun updateProfileItem(id: String, index: Int, content: String) {
+        val profile = profiles.firstOrNull { it.id == id } ?: return
+        if (index in profile.items.indices) {
+            profile.items[index] = content
+            if (!profile.isNameCustom) {
+                profile.name = UserProfile.generateAutoName(profile.items, profiles.indexOf(profile))
+            }
+        }
+    }
+
+    fun activeProfileText(): String {
+        val profile = profiles.firstOrNull { it.id == activeProfileId } ?: return ""
+        return profile.toText()
+    }
+
     fun promoteToLongTerm(session: SessionState, itemId: String, timestamp: Long) {
         val index = session.workingMemory.indexOfFirst { it.id == itemId }
         if (index < 0) return
@@ -70,6 +133,7 @@ class AppState(
         activeSession.sendToAll(
             prompt, scope,
             longTermMemoryText = longTermMemoryText(),
+            profileText = activeProfileText(),
             timestamp = currentTimeMs(),
             onLongTermExtracted = { items ->
                 items.forEach { addLongTermMemoryItem(it, MemorySource.AUTO_EXTRACTED, currentTimeMs()) }
@@ -80,6 +144,7 @@ class AppState(
         activeSession.sendToOne(
             chat, prompt, scope,
             longTermMemoryText = longTermMemoryText(),
+            profileText = activeProfileText(),
             timestamp = currentTimeMs(),
             onLongTermExtracted = { items ->
                 items.forEach { addLongTermMemoryItem(it, MemorySource.AUTO_EXTRACTED, currentTimeMs()) }
@@ -163,6 +228,17 @@ class AppState(
             val source = try { MemorySource.valueOf(memDto.source) } catch (_: Exception) { MemorySource.MANUAL }
             longTermMemory.add(MemoryItem(id = memDto.id, content = memDto.content, source = source, timestamp = memDto.timestamp))
         }
+
+        // Restore profiles
+        dto.profiles.forEach { profileDto ->
+            profiles.add(UserProfile(
+                id = profileDto.id,
+                name = profileDto.name,
+                items = profileDto.items,
+                isNameCustom = profileDto.isNameCustom
+            ))
+        }
+        activeProfileId = dto.activeProfileId
     }
 
     /** Auto-renames a "New" session using the cheapest available model. */

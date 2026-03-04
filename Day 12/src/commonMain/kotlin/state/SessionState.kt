@@ -93,6 +93,7 @@ class SessionState(
         prompt: String,
         scope: CoroutineScope,
         longTermMemoryText: String = "",
+        profileText: String = "",
         timestamp: Long = 0L,
         onLongTermExtracted: ((List<String>) -> Unit)? = null
     ): List<Job> {
@@ -123,6 +124,8 @@ class SessionState(
                     stop, responseFormat, jsonSchema, apiConfig.baseUrl,
                     workingMemoryText = wmText,
                     longTermMemoryText = longTermMemoryText,
+                    profileText = profileText,
+                    lang = settings.lang,
                     onMemoryExtracted = { result ->
                         result.workingItems.forEach { addWorkingMemoryItem(it, MemorySource.AUTO_EXTRACTED, timestamp) }
                         if (result.longTermItems.isNotEmpty()) {
@@ -139,6 +142,7 @@ class SessionState(
         prompt: String,
         scope: CoroutineScope,
         longTermMemoryText: String = "",
+        profileText: String = "",
         timestamp: Long = 0L,
         onLongTermExtracted: ((List<String>) -> Unit)? = null
     ): Job? {
@@ -165,6 +169,8 @@ class SessionState(
                 stop, responseFormat, jsonSchema, apiConfig.baseUrl,
                 workingMemoryText = wmText,
                 longTermMemoryText = longTermMemoryText,
+                profileText = profileText,
+                lang = settings.lang,
                 onMemoryExtracted = { result ->
                     result.workingItems.forEach { addWorkingMemoryItem(it, MemorySource.AUTO_EXTRACTED, timestamp) }
                     if (result.longTermItems.isNotEmpty()) {

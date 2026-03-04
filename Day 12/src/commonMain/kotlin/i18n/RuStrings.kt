@@ -54,20 +54,37 @@ object RuStrings : Strings {
     override val extractMemory = "Извлекать память"
     override val extractingMemory = "Извлечение памяти..."
 
+    // Profile selector
+    override val profileSectionTitle = "Профиль"
+    override val noProfileSelected = "Нет профиля"
+    override val renameProfile = "Переименовать"
+    override val addProfileItemPlaceholder = "Добавить предпочтение..."
+    override val noProfileItems = "Нет предпочтений"
+
     // Memory panel
     override val memoryPanelTitle = "Память"
-    override val shortTermMemoryTab = "Кратковр."
-    override val workingMemoryTab = "Рабочая"
-    override val longTermMemoryTab = "Долговр."
+    override val sessionMemoryTab = "Сессия"
+    override val globalMemoryTab = "Общая"
     override val addMemoryPlaceholder = "Добавить элемент..."
-    override val promoteToLongTerm = "В долговременную"
+    override val moveToGlobal = "В общую память"
     override val noMemoryItems = "Нет элементов"
     override val memorySourceAuto = "авто"
     override val memorySourceManual = "вручную"
     override val memorySourcePromoted = "повышен"
-    override val shortTermReadOnly = "Последние сообщения (только чтение)"
+    override val sessionMemoryScopeLabel = "только эта сессия"
+    override val globalMemoryScopeLabel = "сохраняется между сессиями"
+    override fun memoryTokenEstimate(tokens: Int) = "~$tokens токенов"
     override fun summaryCountLabel(n: Int) = "Саммари создано: $n"
     override fun requestHistoryLabel(n: Int) = "История ($n сообщений)"
+
+    // Profile dialog
+    override val profileDialogTitle = "Редактирование профилей"
+    override val editProfile = "Изменить"
+    override val deleteProfileConfirmTitle = "Удалить профиль"
+    override fun deleteProfileConfirmBody(name: String) = "Удалить «$name»?"
+    override val confirm = "Удалить"
+    override val addProfile = "Добавить профиль"
+    override val profileItemsHeader = "Предпочтения"
 
     // Statistics tooltip
     override val lastRequest = "Последний запрос"

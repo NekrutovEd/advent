@@ -6,10 +6,13 @@ import androidx.compose.animation.shrinkVertically
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import i18n.LocalStrings
 import i18n.stringsFor
@@ -23,6 +26,7 @@ fun App(appState: AppState) {
     val isBusy = appState.isBusy
     var prompt by remember { mutableStateOf("") }
     var isTopCollapsed by remember { mutableStateOf(false) }
+    var showProfileDialog by remember { mutableStateOf(false) }
 
     val hasApiKey = appState.settings.apiConfigs.any { it.apiKey.isNotBlank() }
 
@@ -69,6 +73,49 @@ fun App(appState: AppState) {
                         )
                         TextButton(onClick = { appState.showMemoryPanel = !appState.showMemoryPanel }) {
                             Text(s.memoryPanelTitle)
+                        }
+                        // Profile selector
+                        Box {
+                            var profileDropdownExpanded by remember { mutableStateOf(false) }
+                            val activeProfile = appState.profiles.firstOrNull { it.id == appState.activeProfileId }
+                            OutlinedButton(
+                                onClick = { profileDropdownExpanded = true },
+                                contentPadding = PaddingValues(horizontal = 8.dp, vertical = 4.dp)
+                            ) {
+                                Text(
+                                    (activeProfile?.name ?: s.noProfileSelected) + " \u25BC",
+                                    style = MaterialTheme.typography.bodySmall,
+                                    maxLines = 1,
+                                    overflow = TextOverflow.Ellipsis
+                                )
+                            }
+                            DropdownMenu(
+                                expanded = profileDropdownExpanded,
+                                onDismissRequest = { profileDropdownExpanded = false }
+                            ) {
+                                DropdownMenuItem(
+                                    text = { Text(s.noProfileSelected, style = MaterialTheme.typography.bodySmall) },
+                                    onClick = {
+                                        appState.selectProfile(null)
+                                        profileDropdownExpanded = false
+                                    }
+                                )
+                                appState.profiles.forEach { profile ->
+                                    DropdownMenuItem(
+                                        text = { Text(profile.name, style = MaterialTheme.typography.bodySmall) },
+                                        onClick = {
+                                            appState.selectProfile(profile.id)
+                                            profileDropdownExpanded = false
+                                        }
+                                    )
+                                }
+                            }
+                        }
+                        IconButton(
+                            onClick = { showProfileDialog = true },
+                            modifier = Modifier.size(32.dp)
+                        ) {
+                            Icon(Icons.Default.Edit, contentDescription = s.editProfile, modifier = Modifier.size(18.dp))
                         }
                         TextButton(onClick = { appState.showSettings = true }) {
                             Text("\u2699 ${s.settingsTitle}")
@@ -197,7 +244,6 @@ fun App(appState: AppState) {
                         if (appState.showMemoryPanel) {
                             VerticalDivider()
                             MemoryPanel(
-                                shortTermMessages = activeSession.chats.flatMap { it.messages }.takeLast(10),
                                 workingMemory = activeSession.workingMemory,
                                 longTermMemory = appState.longTermMemory,
                                 onAddWorkingItem = { activeSession.addWorkingMemoryItem(it, state.MemorySource.MANUAL, appState.currentTimeMs()) },
@@ -218,6 +264,21 @@ fun App(appState: AppState) {
                 SettingsDialog(
                     settings = appState.settings,
                     onDismiss = { appState.showSettings = false }
+                )
+            }
+
+            if (showProfileDialog) {
+                ProfileDialog(
+                    profiles = appState.profiles,
+                    activeProfileId = appState.activeProfileId,
+                    onAddProfile = { appState.addProfile() },
+                    onRemoveProfile = { appState.removeProfile(it) },
+                    onSelectProfile = { appState.selectProfile(it) },
+                    onRenameProfile = { id, name -> appState.renameProfile(id, name) },
+                    onAddProfileItem = { id, content -> appState.addProfileItem(id, content) },
+                    onRemoveProfileItem = { id, index -> appState.removeProfileItem(id, index) },
+                    onUpdateProfileItem = { id, index, content -> appState.updateProfileItem(id, index, content) },
+                    onDismiss = { showProfileDialog = false }
                 )
             }
         }
