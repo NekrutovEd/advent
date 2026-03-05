@@ -75,6 +75,13 @@ class SessionState(
         clone.summaryCount = source.summaryCount
         clone.slidingWindow = source.slidingWindow
         clone.extractMemory = source.extractMemory
+        clone.taskTracking = source.taskTracking
+        clone.taskTracker.phase = source.taskTracker.phase
+        clone.taskTracker.isPaused = source.taskTracker.isPaused
+        clone.taskTracker.steps.addAll(source.taskTracker.steps)
+        clone.taskTracker.currentStepIndex = source.taskTracker.currentStepIndex
+        clone.taskTracker.expectedAction = source.taskTracker.expectedAction
+        clone.taskTracker.taskDescription = source.taskTracker.taskDescription
         clone.stopWords.clear()
         clone.stopWords.addAll(source.stopWords)
         clone.visibleOptions = source.visibleOptions
@@ -189,6 +196,7 @@ class SessionState(
         defaultKeepLastMessages = settings.defaultKeepLastMessages,
         defaultSlidingWindow = settings.defaultSlidingWindow,
         defaultExtractMemory = settings.defaultExtractMemory,
+        defaultTaskTracking = settings.defaultTaskTracking,
         id = id
     )
 

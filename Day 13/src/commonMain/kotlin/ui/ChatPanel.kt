@@ -309,6 +309,18 @@ fun ChatPanel(
                 }
             }
         }
+        if (ChatOption.TASK_TRACKING in chatState.visibleOptions) {
+            Column(modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Switch(
+                        checked = chatState.taskTracking,
+                        onCheckedChange = { chatState.taskTracking = it }
+                    )
+                    Spacer(Modifier.width(8.dp))
+                    Text(s.taskTrackingLabel, style = MaterialTheme.typography.bodyMedium)
+                }
+            }
+        }
         if (ChatOption.TEMPERATURE in chatState.visibleOptions) {
             val tempValue = chatState.temperatureOverride ?: 1.0f
             Column(modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)) {
@@ -323,6 +335,11 @@ fun ChatPanel(
                     steps = 19
                 )
             }
+        }
+
+        // Task stepper bar
+        if (chatState.taskTracking) {
+            TaskStepperBar(taskTracker = chatState.taskTracker)
         }
 
         HorizontalDivider()

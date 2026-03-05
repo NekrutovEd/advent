@@ -86,6 +86,20 @@ object EnStrings : Strings {
     override val addProfile = "Add Profile"
     override val profileItemsHeader = "Preferences"
 
+    // Task tracking
+    override val optionTaskTracking = "Task Tracking"
+    override val taskTrackingLabel = "Track task phases"
+    override val taskPlanning = "Plan"
+    override val taskExecution = "Execute"
+    override val taskValidation = "Validate"
+    override val taskDone = "Done"
+    override val taskPause = "Pause"
+    override val taskResume = "Resume"
+    override val taskReset = "Reset"
+    override val taskExtracting = "analyzing..."
+    override val taskExpected = "Expected"
+    override val taskPausedBanner = "Task paused. Send a message to resume."
+
     // Statistics tooltip
     override val lastRequest = "Last request"
     override val sessionTotal = "Session total"

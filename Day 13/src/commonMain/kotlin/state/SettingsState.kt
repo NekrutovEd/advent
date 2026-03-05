@@ -24,6 +24,9 @@ class SettingsState {
     var defaultExtractMemory by mutableStateOf(false)
     val defaultExtractFacts get() = defaultExtractMemory
 
+    // Task tracking default (on by default)
+    var defaultTaskTracking by mutableStateOf(true)
+
     val apiConfigs = mutableStateListOf(
         ApiConfig(
             id = "groq",

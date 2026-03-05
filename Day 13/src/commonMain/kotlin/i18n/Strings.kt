@@ -86,6 +86,20 @@ interface Strings {
     val addProfile: String
     val profileItemsHeader: String
 
+    // Task tracking
+    val optionTaskTracking: String
+    val taskTrackingLabel: String
+    val taskPlanning: String
+    val taskExecution: String
+    val taskValidation: String
+    val taskDone: String
+    val taskPause: String
+    val taskResume: String
+    val taskReset: String
+    val taskExtracting: String
+    val taskExpected: String
+    val taskPausedBanner: String
+
     // Statistics tooltip
     val lastRequest: String
     val sessionTotal: String

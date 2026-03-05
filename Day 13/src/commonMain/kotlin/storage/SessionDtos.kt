@@ -14,6 +14,19 @@ data class MemoryItemDto(
 )
 
 @Serializable
+data class TaskStepDto(val description: String, val completed: Boolean = false)
+
+@Serializable
+data class TaskTrackerDto(
+    val phase: String = "IDLE",
+    val isPaused: Boolean = false,
+    val steps: List<TaskStepDto> = emptyList(),
+    val currentStepIndex: Int = 0,
+    val expectedAction: String = "",
+    val taskDescription: String = ""
+)
+
+@Serializable
 data class ChatStateDto(
     val id: String,
     val constraints: String,
@@ -33,6 +46,8 @@ data class ChatStateDto(
     val extractFacts: Boolean = false,
     val stickyFacts: String = "",
     val extractMemory: Boolean = false,
+    val taskTracking: Boolean = true,
+    val taskTracker: TaskTrackerDto = TaskTrackerDto(),
     val visibleOptions: List<String>,
     val messages: List<ChatMessageDto>,
     val history: List<ChatMessageDto>

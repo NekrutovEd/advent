@@ -27,6 +27,7 @@ class ChatState(
     defaultKeepLastMessages: String = "4",
     defaultSlidingWindow: String = "",
     defaultExtractMemory: Boolean = false,
+    defaultTaskTracking: Boolean = false,
     id: String? = null
 ) {
     val id: String = id ?: buildId()
@@ -64,6 +65,10 @@ class ChatState(
     // Memory extraction (replaces sticky facts)
     var extractMemory by mutableStateOf(defaultExtractMemory)
     var isExtractingMemory by mutableStateOf(false)
+
+    // Task tracking
+    var taskTracking by mutableStateOf(defaultTaskTracking)
+    val taskTracker = TaskTracker()
 
     private val history = mutableListOf<ChatMessage>()
 
@@ -121,6 +126,10 @@ class ChatState(
                 keepLastMessages = "4"
                 slidingWindow = ""
                 extractMemory = false
+            }
+            ChatOption.TASK_TRACKING -> {
+                taskTracking = true
+                taskTracker.reset()
             }
         }
     }
@@ -312,8 +321,9 @@ class ChatState(
 
         val snapshotHistory = if (sendHistory) applySlidingWindow(history.toList()) else emptyList()
 
-        // Prepend memory as system messages in snapshot
-        val memoryPreamble = buildMemoryPreamble(profileText, longTermMemoryText, workingMemoryText)
+        // Prepend memory and task state as system messages in snapshot
+        val taskContext = if (taskTracking) taskTracker.toContextString(lang) else ""
+        val memoryPreamble = buildMemoryPreamble(profileText, longTermMemoryText, workingMemoryText, taskContext)
         val snapshotWithMemory = memoryPreamble + snapshotHistory
 
         val snapshot = try {
@@ -339,8 +349,8 @@ class ChatState(
             val fullHistory = if (sendHistory) history.toList() else listOf(history.last())
             val windowedHistory = if (sendHistory) applySlidingWindow(fullHistory) else fullHistory
 
-            // Prepend memory
-            val apiHistory = buildMemoryPreamble(profileText, longTermMemoryText, workingMemoryText) + windowedHistory
+            // Prepend memory and task state
+            val apiHistory = buildMemoryPreamble(profileText, longTermMemoryText, workingMemoryText, taskContext) + windowedHistory
 
             val response = chatApi.sendMessage(
                 history = apiHistory,
@@ -372,6 +382,9 @@ class ChatState(
             if (result != null) {
                 onMemoryExtracted?.invoke(result)
             }
+
+            // Extract task state after successful response
+            extractTaskStateIfNeeded(apiKey, model, temperature, connectTimeoutSec, readTimeoutSec, baseUrl, lang)
         } catch (e: Exception) {
             error = e.message ?: "Unknown error"
             if (history.isNotEmpty()) history.removeLast()
@@ -381,7 +394,38 @@ class ChatState(
         }
     }
 
-    private fun buildMemoryPreamble(profileText: String, longTermMemoryText: String, workingMemoryText: String): List<ChatMessage> {
+    private suspend fun extractTaskStateIfNeeded(
+        apiKey: String,
+        model: String,
+        temperature: Double?,
+        connectTimeoutSec: Int?,
+        readTimeoutSec: Int?,
+        baseUrl: String? = null,
+        lang: Lang = Lang.EN
+    ) {
+        if (!taskTracking || taskTracker.isPaused) return
+        val conversational = history.filter { it.role == "user" || it.role == "assistant" }
+        if (conversational.size < 2) return
+
+        taskTracker.isExtracting = true
+        try {
+            val extracted = TaskTracker.extractState(
+                chatApi, conversational, apiKey, model, temperature,
+                connectTimeoutSec, readTimeoutSec, baseUrl, lang
+            ) ?: return
+
+            taskTracker.phase = extracted.phase
+            taskTracker.taskDescription = extracted.taskDescription
+            taskTracker.expectedAction = extracted.expectedAction
+            taskTracker.steps.clear()
+            taskTracker.steps.addAll(extracted.steps)
+            taskTracker.currentStepIndex = extracted.currentStepIndex
+        } finally {
+            taskTracker.isExtracting = false
+        }
+    }
+
+    private fun buildMemoryPreamble(profileText: String, longTermMemoryText: String, workingMemoryText: String, taskContext: String = ""): List<ChatMessage> {
         return buildList {
             if (profileText.isNotBlank()) {
                 add(ChatMessage("system", "[Active Profile]\n$profileText"))
@@ -391,6 +435,9 @@ class ChatState(
             }
             if (workingMemoryText.isNotBlank()) {
                 add(ChatMessage("system", "[Task Context]\n$workingMemoryText"))
+            }
+            if (taskContext.isNotBlank()) {
+                add(ChatMessage("system", taskContext))
             }
         }
     }
@@ -407,5 +454,6 @@ class ChatState(
         totalCompletionTokens = 0
         totalTokens = 0
         isExtractingMemory = false
+        taskTracker.reset()
     }
 }

@@ -6,6 +6,8 @@ import state.AppState
 import state.MemoryItem
 import state.MemorySource
 import state.SessionState
+import state.TaskPhase
+import state.TaskStep
 import state.UserProfile
 import state.buildMemoryId
 
@@ -100,6 +102,15 @@ object SessionSerializer {
                     slidingWindow = chat.slidingWindow,
                     extractFacts = chat.extractMemory, // backward compat
                     extractMemory = chat.extractMemory,
+                    taskTracking = chat.taskTracking,
+                    taskTracker = TaskTrackerDto(
+                        phase = chat.taskTracker.phase.name,
+                        isPaused = chat.taskTracker.isPaused,
+                        steps = chat.taskTracker.steps.map { TaskStepDto(it.description, it.completed) },
+                        currentStepIndex = chat.taskTracker.currentStepIndex,
+                        expectedAction = chat.taskTracker.expectedAction,
+                        taskDescription = chat.taskTracker.taskDescription
+                    ),
                     visibleOptions = chat.visibleOptions.map { it.name },
                     messages = chat.messages.map { ChatMessageDto(it.role, it.content) },
                     history = chat.historySnapshot().map { ChatMessageDto(it.role, it.content) }
@@ -135,6 +146,14 @@ object SessionSerializer {
             chat.summaryCount = chatDto.summaryCount
             chat.slidingWindow = chatDto.slidingWindow
             chat.extractMemory = chatDto.extractMemory || chatDto.extractFacts
+            chat.taskTracking = chatDto.taskTracking
+            val tt = chatDto.taskTracker
+            chat.taskTracker.phase = runCatching { TaskPhase.valueOf(tt.phase) }.getOrDefault(TaskPhase.IDLE)
+            chat.taskTracker.isPaused = tt.isPaused
+            chat.taskTracker.steps.addAll(tt.steps.map { TaskStep(it.description, it.completed) })
+            chat.taskTracker.currentStepIndex = tt.currentStepIndex
+            chat.taskTracker.expectedAction = tt.expectedAction
+            chat.taskTracker.taskDescription = tt.taskDescription
             chat.visibleOptions = chatDto.visibleOptions.mapNotNull { name ->
                 // Backward compat: map old HISTORY/SUMMARIZATION to CONTEXT
                 val mapped = when (name) {

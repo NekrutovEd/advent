@@ -86,6 +86,20 @@ object RuStrings : Strings {
     override val addProfile = "Добавить профиль"
     override val profileItemsHeader = "Предпочтения"
 
+    // Task tracking
+    override val optionTaskTracking = "Отслеживание задач"
+    override val taskTrackingLabel = "Отслеживать фазы задачи"
+    override val taskPlanning = "План"
+    override val taskExecution = "Выполн."
+    override val taskValidation = "Провер."
+    override val taskDone = "Готово"
+    override val taskPause = "Пауза"
+    override val taskResume = "Продолжить"
+    override val taskReset = "Сброс"
+    override val taskExtracting = "анализ..."
+    override val taskExpected = "Ожидается"
+    override val taskPausedBanner = "Задача приостановлена. Отправьте сообщение для продолжения."
+
     // Statistics tooltip
     override val lastRequest = "Последний запрос"
     override val sessionTotal = "Итого за сессию"

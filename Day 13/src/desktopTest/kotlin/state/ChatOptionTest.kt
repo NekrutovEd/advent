@@ -187,6 +187,7 @@ class ChatOptionTest {
         assertEquals("Model", ChatOption.MODEL.label(EnStrings))
         assertEquals("Statistics", ChatOption.STATISTICS.label(EnStrings))
         assertEquals("Response Format", ChatOption.RESPONSE_FORMAT.label(EnStrings))
+        assertEquals("Task Tracking", ChatOption.TASK_TRACKING.label(EnStrings))
     }
 
     @Test
@@ -199,5 +200,16 @@ class ChatOptionTest {
         assertEquals("Модель", ChatOption.MODEL.label(RuStrings))
         assertEquals("Статистика", ChatOption.STATISTICS.label(RuStrings))
         assertEquals("Формат ответа", ChatOption.RESPONSE_FORMAT.label(RuStrings))
+        assertEquals("Отслеживание задач", ChatOption.TASK_TRACKING.label(RuStrings))
+    }
+
+    @Test
+    fun `toggleOption off resets task tracking`() {
+        chatState.toggleOption(ChatOption.TASK_TRACKING)
+        chatState.taskTracking = false
+        chatState.taskTracker.phase = TaskPhase.EXECUTION
+        chatState.toggleOption(ChatOption.TASK_TRACKING)
+        assertTrue(chatState.taskTracking)
+        assertEquals(TaskPhase.IDLE, chatState.taskTracker.phase)
     }
 }

@@ -11,7 +11,8 @@ enum class ChatOption {
     RESPONSE_FORMAT,
     CONTEXT,
     MODEL,
-    TEMPERATURE;
+    TEMPERATURE,
+    TASK_TRACKING;
 
     fun label(strings: Strings): String = when (this) {
         STATISTICS -> strings.optionStatistics
@@ -23,5 +24,6 @@ enum class ChatOption {
         CONTEXT -> strings.optionContext
         MODEL -> strings.model
         TEMPERATURE -> strings.optionTemperature
+        TASK_TRACKING -> strings.optionTaskTracking
     }
 }

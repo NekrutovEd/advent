@@ -22,6 +22,7 @@ private class ContextDraft(settings: SettingsState) {
     var keepLast by mutableStateOf(settings.defaultKeepLastMessages)
     var slidingWindow by mutableStateOf(settings.defaultSlidingWindow)
     var extractMemory by mutableStateOf(settings.defaultExtractMemory)
+    var taskTracking by mutableStateOf(settings.defaultTaskTracking)
 }
 
 private class ApiConfigDraft(config: ApiConfig) {
@@ -132,6 +133,16 @@ fun SettingsDialog(
                     )
                     Text(s.extractMemory, style = MaterialTheme.typography.bodyMedium)
                 }
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    Switch(
+                        checked = contextDraft.taskTracking,
+                        onCheckedChange = { contextDraft.taskTracking = it }
+                    )
+                    Text(s.taskTrackingLabel, style = MaterialTheme.typography.bodyMedium)
+                }
 
                 HorizontalDivider()
 
@@ -240,6 +251,7 @@ fun SettingsDialog(
                 settings.defaultKeepLastMessages = contextDraft.keepLast
                 settings.defaultSlidingWindow = contextDraft.slidingWindow
                 settings.defaultExtractMemory = contextDraft.extractMemory
+                settings.defaultTaskTracking = contextDraft.taskTracking
                 settings.apiConfigs.forEachIndexed { index, config ->
                     val draft = drafts[index]
                     config.apiKey = draft.apiKey
