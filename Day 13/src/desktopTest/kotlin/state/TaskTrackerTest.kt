@@ -113,8 +113,8 @@ class TaskTrackerTest {
         val tracker = TaskTracker()
         val ctx = tracker.toContextString(Lang.EN)
         assertTrue(ctx.contains("[Task Flow Rules]"))
-        assertTrue(ctx.contains("PLANNING"))
-        assertTrue(ctx.contains("EXECUTION"))
+        assertTrue(ctx.contains("Execute"))
+        assertTrue(ctx.contains("Do NOT stop"))
     }
 
     @Test
@@ -154,13 +154,13 @@ class TaskTrackerTest {
     }
 
     @Test
-    fun `toContextString for PLANNING says stop and ask to confirm`() {
+    fun `toContextString for PLANNING says proceed without stopping`() {
         val tracker = TaskTracker()
         tracker.phase = TaskPhase.PLANNING
 
         val ctx = tracker.toContextString(Lang.EN)
         assertTrue(ctx.contains("PLANNING"))
-        assertTrue(ctx.contains("STOP and ask the user to confirm"))
+        assertTrue(ctx.contains("Do NOT wait for user confirmation"))
     }
 
     @Test
@@ -206,7 +206,7 @@ class TaskTrackerTest {
         // First enqueue the main response
         enqueueSuccess("Let me plan the implementation. Step 1: Design the API.")
         // Then enqueue the task extraction response
-        val taskJson = """{"phase":"planning","task_description":"Design API","steps":["Gather requirements","Design endpoints"],"current_step":0,"completed_steps":[],"expected_action":"User confirms requirements","awaiting_user":true}"""
+        val taskJson = """{"phase":"planning","task_description":"Design API","steps":["Gather requirements","Design endpoints"],"current_step":0,"completed_steps":[],"expected_action":"Gather requirements"}"""
         enqueueSuccess(taskJson)
 
         val chat = appState.activeSession.chats[0]
@@ -217,7 +217,7 @@ class TaskTrackerTest {
         assertEquals("Design API", chat.taskTracker.taskDescription)
         assertEquals(2, chat.taskTracker.steps.size)
         assertEquals("Gather requirements", chat.taskTracker.steps[0].description)
-        assertEquals("User confirms requirements", chat.taskTracker.expectedAction)
+        assertEquals("Gather requirements", chat.taskTracker.expectedAction)
     }
 
     @Test

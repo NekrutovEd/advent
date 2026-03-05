@@ -12,7 +12,6 @@ import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonArray
 import kotlinx.serialization.json.jsonPrimitive
 import kotlinx.serialization.json.intOrNull
-import kotlinx.serialization.json.booleanOrNull
 
 enum class TaskPhase {
     IDLE, PLANNING, EXECUTION, VALIDATION, DONE;
@@ -43,12 +42,12 @@ class TaskTracker {
     fun toContextString(lang: Lang): String {
         if (phase == TaskPhase.IDLE) return buildString {
             appendLine("[Task Flow Rules]")
-            appendLine("If the user gives you a task:")
-            appendLine("1. PLANNING: First present a clear plan with numbered steps. Then STOP and ask the user to confirm.")
-            appendLine("2. EXECUTION: After the user confirms, execute the plan completely without stopping.")
-            appendLine("3. VALIDATION: Review and verify the result.")
-            appendLine("4. DONE: Present the final result.")
-            appendLine("Do NOT ask for permission at each step during execution. Only stop after presenting the plan.")
+            appendLine("If the user gives you a task, complete it fully in one response:")
+            appendLine("1. Briefly outline your plan (2-3 sentences, no need for user confirmation)")
+            appendLine("2. Execute the plan immediately")
+            appendLine("3. Verify the result")
+            appendLine("4. Present the final result")
+            appendLine("Do NOT stop to ask for confirmation. Do NOT ask 'should I proceed?'. Just do the entire task.")
         }.trim()
         return buildString {
             appendLine("[Task State]")
@@ -80,9 +79,9 @@ class TaskTracker {
                 }
                 phase == TaskPhase.PLANNING -> {
                     appendLine("You are in PLANNING phase.")
-                    appendLine("- Present your plan clearly with numbered steps.")
-                    appendLine("- After presenting the plan, STOP and ask the user to confirm before proceeding.")
-                    appendLine("- Do NOT start executing until the user confirms the plan.")
+                    appendLine("- Briefly state your approach, then immediately start executing.")
+                    appendLine("- Do NOT wait for user confirmation. Do NOT ask 'shall I proceed?'.")
+                    appendLine("- Transition to execution within the same response.")
                 }
                 phase == TaskPhase.EXECUTION || phase == TaskPhase.VALIDATION -> {
                     appendLine("You are in ${phase.name} phase.")
@@ -138,33 +137,27 @@ class TaskTracker {
                     appendLine("${msg.role}: ${msg.content.take(500)}")
                 }
                 appendLine()
-                appendLine("IMPORTANT FLOW RULES:")
-                appendLine("- The task flow is: planning -> execution -> validation -> done")
-                appendLine("- PLANNING: the assistant is discussing approach, presenting a plan, or asking clarifying questions")
-                appendLine("- EXECUTION: the assistant is actively doing the work (writing, implementing, creating)")
-                appendLine("- VALIDATION: the assistant is reviewing, checking, or verifying the result")
-                appendLine("- DONE: the task is complete, final result presented")
+                appendLine("PHASE RULES (the assistant should never stop between phases):")
                 appendLine("- idle: no task, casual conversation")
-                appendLine()
-                appendLine("PHASE DETECTION RULES:")
-                appendLine("- If the assistant presented a plan and is waiting for user confirmation -> planning, awaiting_user=true")
-                appendLine("- If the user confirmed the plan (e.g. 'yes', 'ok', 'go ahead', 'do it') -> execution, awaiting_user=false")
-                appendLine("- If the assistant is actively working on the task -> execution, awaiting_user=false")
-                appendLine("- If the assistant finished the work and is reviewing -> validation, awaiting_user=false")
-                appendLine("- If the task is complete -> done, awaiting_user=false")
-                appendLine("- awaiting_user should ONLY be true when the assistant explicitly asked the user a question and needs an answer to proceed")
+                appendLine("- planning: the assistant outlined/stated the approach (even briefly)")
+                appendLine("- execution: the assistant is actively doing the work (the main phase)")
+                appendLine("- validation: the assistant is reviewing or verifying the result")
+                appendLine("- done: task complete, final result presented")
+                appendLine("- The assistant completes all phases in one response. Detect the LAST phase reached.")
+                appendLine("- If the response contains a plan AND execution, the phase is execution (not planning).")
+                appendLine("- If the response contains execution AND verification, the phase is validation.")
+                appendLine("- If the task is fully complete, the phase is done.")
                 appendLine()
                 appendLine("Determine:")
                 appendLine("1. task_description: brief description of the overall task (empty if just chatting)")
-                appendLine("2. phase: one of idle/planning/execution/validation/done")
-                appendLine("3. steps: array of sub-step descriptions for the current phase (max 5)")
+                appendLine("2. phase: one of idle/planning/execution/validation/done (the LAST phase reached)")
+                appendLine("3. steps: array of sub-step descriptions for the overall task (max 5)")
                 appendLine("4. current_step: 0-based index of the active step")
                 appendLine("5. completed_steps: array of 0-based indices of completed steps")
-                appendLine("6. expected_action: brief description of what happens next (from the assistant's perspective)")
-                appendLine("7. awaiting_user: true ONLY if the assistant asked a question and cannot proceed without user's answer")
+                appendLine("6. expected_action: brief description of what the assistant will do next")
                 appendLine()
                 appendLine("Return JSON only:")
-                appendLine("""{"task_description":"...","phase":"...","steps":["..."],"current_step":0,"completed_steps":[0],"expected_action":"...","awaiting_user":false}""")
+                appendLine("""{"task_description":"...","phase":"...","steps":["..."],"current_step":0,"completed_steps":[0],"expected_action":"..."}""")
                 appendLine("If it's casual conversation with no task, return {\"phase\":\"idle\"}")
             }
 
@@ -202,7 +195,6 @@ class TaskTracker {
                     ?.mapNotNull { it.jsonPrimitive.intOrNull }?.toSet() ?: emptySet()
                 val expectedAction = obj["expected_action"]?.jsonPrimitive?.content ?: ""
                 val taskDescription = obj["task_description"]?.jsonPrimitive?.content ?: ""
-                val awaitingUser = obj["awaiting_user"]?.jsonPrimitive?.booleanOrNull ?: false
 
                 ExtractedTaskState(
                     phase = phase,
@@ -211,8 +203,7 @@ class TaskTracker {
                     },
                     currentStepIndex = currentStep.coerceIn(0, (stepsArr.size - 1).coerceAtLeast(0)),
                     expectedAction = expectedAction,
-                    taskDescription = taskDescription,
-                    awaitingUser = awaitingUser
+                    taskDescription = taskDescription
                 )
             } catch (_: Exception) {
                 null
@@ -226,6 +217,5 @@ data class ExtractedTaskState(
     val steps: List<TaskStep>,
     val currentStepIndex: Int,
     val expectedAction: String,
-    val taskDescription: String,
-    val awaitingUser: Boolean
+    val taskDescription: String
 )
