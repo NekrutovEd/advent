@@ -109,9 +109,12 @@ class TaskTrackerTest {
     // --- Context string ---
 
     @Test
-    fun `toContextString returns empty for IDLE`() {
+    fun `toContextString returns flow rules for IDLE`() {
         val tracker = TaskTracker()
-        assertEquals("", tracker.toContextString(Lang.EN))
+        val ctx = tracker.toContextString(Lang.EN)
+        assertTrue(ctx.contains("[Task Flow Rules]"))
+        assertTrue(ctx.contains("PLANNING"))
+        assertTrue(ctx.contains("EXECUTION"))
     }
 
     @Test
@@ -137,6 +140,27 @@ class TaskTrackerTest {
         val ctx = tracker.toContextString(Lang.EN)
         assertTrue(ctx.contains("PAUSED"))
         assertTrue(ctx.contains("Continue from where you left off"))
+    }
+
+    @Test
+    fun `toContextString for EXECUTION says proceed without stopping`() {
+        val tracker = TaskTracker()
+        tracker.phase = TaskPhase.EXECUTION
+        tracker.taskDescription = "Build feature"
+
+        val ctx = tracker.toContextString(Lang.EN)
+        assertTrue(ctx.contains("EXECUTION"))
+        assertTrue(ctx.contains("WITHOUT stopping"))
+    }
+
+    @Test
+    fun `toContextString for PLANNING says stop and ask to confirm`() {
+        val tracker = TaskTracker()
+        tracker.phase = TaskPhase.PLANNING
+
+        val ctx = tracker.toContextString(Lang.EN)
+        assertTrue(ctx.contains("PLANNING"))
+        assertTrue(ctx.contains("STOP and ask the user to confirm"))
     }
 
     @Test

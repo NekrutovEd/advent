@@ -41,31 +41,21 @@ class TaskTracker {
     fun resume() { isPaused = false }
 
     fun toContextString(lang: Lang): String {
-        if (phase == TaskPhase.IDLE) return ""
+        if (phase == TaskPhase.IDLE) return buildString {
+            appendLine("[Task Flow Rules]")
+            appendLine("If the user gives you a task:")
+            appendLine("1. PLANNING: First present a clear plan with numbered steps. Then STOP and ask the user to confirm.")
+            appendLine("2. EXECUTION: After the user confirms, execute the plan completely without stopping.")
+            appendLine("3. VALIDATION: Review and verify the result.")
+            appendLine("4. DONE: Present the final result.")
+            appendLine("Do NOT ask for permission at each step during execution. Only stop after presenting the plan.")
+        }.trim()
         return buildString {
-            val phaseLabel = when (lang) {
-                Lang.EN -> "Phase"
-                Lang.RU -> "Faza"
-            }
-            val stepsLabel = when (lang) {
-                Lang.EN -> "Steps"
-                Lang.RU -> "Shagi"
-            }
-            val expectedLabel = when (lang) {
-                Lang.EN -> "Expected"
-                Lang.RU -> "Ozhidaemoe"
-            }
-            val pausedLabel = when (lang) {
-                Lang.EN -> "PAUSED"
-                Lang.RU -> "PAUSED"
-            }
             appendLine("[Task State]")
             if (taskDescription.isNotBlank()) appendLine("Task: $taskDescription")
-            append("$phaseLabel: ${phase.name}")
-            if (isPaused) append(" ($pausedLabel)")
-            appendLine()
+            appendLine("Phase: ${phase.name}")
             if (steps.isNotEmpty()) {
-                appendLine("$stepsLabel:")
+                appendLine("Steps:")
                 steps.forEachIndexed { i, step ->
                     val marker = when {
                         step.completed -> "[x]"
@@ -76,12 +66,33 @@ class TaskTracker {
                 }
             }
             if (expectedAction.isNotBlank()) {
-                appendLine("$expectedLabel: $expectedAction")
+                appendLine("Expected: $expectedAction")
             }
-            if (isPaused) {
-                when (lang) {
-                    Lang.EN -> appendLine("The task is paused. Continue from where you left off without repeating previous explanations.")
-                    Lang.RU -> appendLine("The task is paused. Continue from where you left off without repeating previous explanations.")
+            appendLine()
+            // Flow rules
+            appendLine("[Task Flow Rules]")
+            when {
+                isPaused -> {
+                    appendLine("Task is PAUSED by user. The user sent a message to continue.")
+                    appendLine("- Read the user's message carefully — it may contain corrections or additional context.")
+                    appendLine("- Continue from where you left off. Do NOT repeat previous explanations or re-plan.")
+                    appendLine("- Resume the current phase and proceed.")
+                }
+                phase == TaskPhase.PLANNING -> {
+                    appendLine("You are in PLANNING phase.")
+                    appendLine("- Present your plan clearly with numbered steps.")
+                    appendLine("- After presenting the plan, STOP and ask the user to confirm before proceeding.")
+                    appendLine("- Do NOT start executing until the user confirms the plan.")
+                }
+                phase == TaskPhase.EXECUTION || phase == TaskPhase.VALIDATION -> {
+                    appendLine("You are in ${phase.name} phase.")
+                    appendLine("- Proceed with the work WITHOUT stopping or asking for confirmation.")
+                    appendLine("- Complete all steps in this phase in a single response.")
+                    appendLine("- Move to the next phase automatically when done.")
+                    appendLine("- Do NOT ask 'should I continue?' — just do it.")
+                }
+                phase == TaskPhase.DONE -> {
+                    appendLine("Task is DONE. Present the final result.")
                 }
             }
         }.trim()
@@ -127,19 +138,30 @@ class TaskTracker {
                     appendLine("${msg.role}: ${msg.content.take(500)}")
                 }
                 appendLine()
+                appendLine("IMPORTANT FLOW RULES:")
+                appendLine("- The task flow is: planning -> execution -> validation -> done")
+                appendLine("- PLANNING: the assistant is discussing approach, presenting a plan, or asking clarifying questions")
+                appendLine("- EXECUTION: the assistant is actively doing the work (writing, implementing, creating)")
+                appendLine("- VALIDATION: the assistant is reviewing, checking, or verifying the result")
+                appendLine("- DONE: the task is complete, final result presented")
+                appendLine("- idle: no task, casual conversation")
+                appendLine()
+                appendLine("PHASE DETECTION RULES:")
+                appendLine("- If the assistant presented a plan and is waiting for user confirmation -> planning, awaiting_user=true")
+                appendLine("- If the user confirmed the plan (e.g. 'yes', 'ok', 'go ahead', 'do it') -> execution, awaiting_user=false")
+                appendLine("- If the assistant is actively working on the task -> execution, awaiting_user=false")
+                appendLine("- If the assistant finished the work and is reviewing -> validation, awaiting_user=false")
+                appendLine("- If the task is complete -> done, awaiting_user=false")
+                appendLine("- awaiting_user should ONLY be true when the assistant explicitly asked the user a question and needs an answer to proceed")
+                appendLine()
                 appendLine("Determine:")
                 appendLine("1. task_description: brief description of the overall task (empty if just chatting)")
                 appendLine("2. phase: one of idle/planning/execution/validation/done")
-                appendLine("   - idle: no task, casual conversation")
-                appendLine("   - planning: discussing approach, requirements, design")
-                appendLine("   - execution: actively implementing, writing code, creating content")
-                appendLine("   - validation: reviewing, testing, checking results")
-                appendLine("   - done: task completed")
                 appendLine("3. steps: array of sub-step descriptions for the current phase (max 5)")
                 appendLine("4. current_step: 0-based index of the active step")
                 appendLine("5. completed_steps: array of 0-based indices of completed steps")
-                appendLine("6. expected_action: what is expected next from the user or assistant")
-                appendLine("7. awaiting_user: true if the assistant asked a question and waits for user input")
+                appendLine("6. expected_action: brief description of what happens next (from the assistant's perspective)")
+                appendLine("7. awaiting_user: true ONLY if the assistant asked a question and cannot proceed without user's answer")
                 appendLine()
                 appendLine("Return JSON only:")
                 appendLine("""{"task_description":"...","phase":"...","steps":["..."],"current_step":0,"completed_steps":[0],"expected_action":"...","awaiting_user":false}""")
