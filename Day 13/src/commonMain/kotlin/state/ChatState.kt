@@ -416,7 +416,6 @@ class ChatState(
 
             taskTracker.phase = extracted.phase
             taskTracker.taskDescription = extracted.taskDescription
-            taskTracker.expectedAction = extracted.expectedAction
             taskTracker.steps.clear()
             taskTracker.steps.addAll(extracted.steps)
             taskTracker.currentStepIndex = extracted.currentStepIndex

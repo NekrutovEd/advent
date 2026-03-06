@@ -22,7 +22,6 @@ data class TaskTrackerDto(
     val isPaused: Boolean = false,
     val steps: List<TaskStepDto> = emptyList(),
     val currentStepIndex: Int = 0,
-    val expectedAction: String = "",
     val taskDescription: String = ""
 )
 

@@ -97,7 +97,7 @@ interface Strings {
     val taskResume: String
     val taskReset: String
     val taskExtracting: String
-    val taskExpected: String
+
     val taskPausedBanner: String
 
     // Statistics tooltip

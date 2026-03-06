@@ -97,7 +97,7 @@ object EnStrings : Strings {
     override val taskResume = "Resume"
     override val taskReset = "Reset"
     override val taskExtracting = "analyzing..."
-    override val taskExpected = "Expected"
+
     override val taskPausedBanner = "Task paused. Send a message to resume."
 
     // Statistics tooltip

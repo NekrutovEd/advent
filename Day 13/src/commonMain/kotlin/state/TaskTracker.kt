@@ -32,23 +32,37 @@ class TaskTracker {
     var isPaused by mutableStateOf(false)
     val steps = mutableStateListOf<TaskStep>()
     var currentStepIndex by mutableStateOf(0)
-    var expectedAction by mutableStateOf("")
     var taskDescription by mutableStateOf("")
     var isExtracting by mutableStateOf(false)
 
     fun pause() { isPaused = true }
     fun resume() { isPaused = false }
 
+    fun phaseActionLabel(lang: Lang): String = when (lang) {
+        Lang.EN -> when (phase) {
+            TaskPhase.IDLE -> ""
+            TaskPhase.PLANNING -> "Planning..."
+            TaskPhase.EXECUTION -> "Working..."
+            TaskPhase.VALIDATION -> "Verifying..."
+            TaskPhase.DONE -> "Complete"
+        }
+        Lang.RU -> when (phase) {
+            TaskPhase.IDLE -> ""
+            TaskPhase.PLANNING -> "Планирование..."
+            TaskPhase.EXECUTION -> "Выполнение..."
+            TaskPhase.VALIDATION -> "Проверка..."
+            TaskPhase.DONE -> "Готово"
+        }
+    }
+
     fun toContextString(lang: Lang): String {
-        if (phase == TaskPhase.IDLE) return buildString {
-            appendLine("[Task Flow Rules]")
-            appendLine("If the user gives you a task, complete it fully in one response:")
-            appendLine("1. Briefly outline your plan (2-3 sentences, no need for user confirmation)")
-            appendLine("2. Execute the plan immediately")
-            appendLine("3. Verify the result")
-            appendLine("4. Present the final result")
-            appendLine("Do NOT stop to ask for confirmation. Do NOT ask 'should I proceed?'. Just do the entire task.")
-        }.trim()
+        val flowRules = "[Task Flow Rules] Complete the ENTIRE task in a SINGLE response. " +
+            "Never stop to ask for confirmation, approval, or permission. " +
+            "Never ask 'should I proceed?', 'shall I continue?', 'do you want me to...?'. " +
+            "Just do the work from start to finish."
+
+        if (phase == TaskPhase.IDLE) return flowRules
+
         return buildString {
             appendLine("[Task State]")
             if (taskDescription.isNotBlank()) appendLine("Task: $taskDescription")
@@ -64,35 +78,13 @@ class TaskTracker {
                     appendLine("  $marker ${step.description}")
                 }
             }
-            if (expectedAction.isNotBlank()) {
-                appendLine("Expected: $expectedAction")
-            }
             appendLine()
-            // Flow rules
-            appendLine("[Task Flow Rules]")
-            when {
-                isPaused -> {
-                    appendLine("Task is PAUSED by user. The user sent a message to continue.")
-                    appendLine("- Read the user's message carefully — it may contain corrections or additional context.")
-                    appendLine("- Continue from where you left off. Do NOT repeat previous explanations or re-plan.")
-                    appendLine("- Resume the current phase and proceed.")
-                }
-                phase == TaskPhase.PLANNING -> {
-                    appendLine("You are in PLANNING phase.")
-                    appendLine("- Briefly state your approach, then immediately start executing.")
-                    appendLine("- Do NOT wait for user confirmation. Do NOT ask 'shall I proceed?'.")
-                    appendLine("- Transition to execution within the same response.")
-                }
-                phase == TaskPhase.EXECUTION || phase == TaskPhase.VALIDATION -> {
-                    appendLine("You are in ${phase.name} phase.")
-                    appendLine("- Proceed with the work WITHOUT stopping or asking for confirmation.")
-                    appendLine("- Complete all steps in this phase in a single response.")
-                    appendLine("- Move to the next phase automatically when done.")
-                    appendLine("- Do NOT ask 'should I continue?' — just do it.")
-                }
-                phase == TaskPhase.DONE -> {
-                    appendLine("Task is DONE. Present the final result.")
-                }
+            if (isPaused) {
+                appendLine("[Task Resumed] The user paused and sent a new message.")
+                appendLine("Read it carefully — it may contain corrections or extra context.")
+                appendLine("Continue from where you left off. Do NOT repeat previous work.")
+            } else {
+                appendLine(flowRules)
             }
         }.trim()
     }
@@ -102,7 +94,6 @@ class TaskTracker {
         isPaused = false
         steps.clear()
         currentStepIndex = 0
-        expectedAction = ""
         taskDescription = ""
         isExtracting = false
     }
@@ -154,10 +145,9 @@ class TaskTracker {
                 appendLine("3. steps: array of sub-step descriptions for the overall task (max 5)")
                 appendLine("4. current_step: 0-based index of the active step")
                 appendLine("5. completed_steps: array of 0-based indices of completed steps")
-                appendLine("6. expected_action: brief description of what the assistant will do next")
                 appendLine()
                 appendLine("Return JSON only:")
-                appendLine("""{"task_description":"...","phase":"...","steps":["..."],"current_step":0,"completed_steps":[0],"expected_action":"..."}""")
+                appendLine("""{"task_description":"...","phase":"...","steps":["..."],"current_step":0,"completed_steps":[0]}""")
                 appendLine("If it's casual conversation with no task, return {\"phase\":\"idle\"}")
             }
 
@@ -193,7 +183,6 @@ class TaskTracker {
                 val currentStep = obj["current_step"]?.jsonPrimitive?.intOrNull ?: 0
                 val completedSteps = obj["completed_steps"]?.jsonArray
                     ?.mapNotNull { it.jsonPrimitive.intOrNull }?.toSet() ?: emptySet()
-                val expectedAction = obj["expected_action"]?.jsonPrimitive?.content ?: ""
                 val taskDescription = obj["task_description"]?.jsonPrimitive?.content ?: ""
 
                 ExtractedTaskState(
@@ -202,7 +191,6 @@ class TaskTracker {
                         TaskStep(desc, i in completedSteps)
                     },
                     currentStepIndex = currentStep.coerceIn(0, (stepsArr.size - 1).coerceAtLeast(0)),
-                    expectedAction = expectedAction,
                     taskDescription = taskDescription
                 )
             } catch (_: Exception) {
@@ -216,6 +204,5 @@ data class ExtractedTaskState(
     val phase: TaskPhase,
     val steps: List<TaskStep>,
     val currentStepIndex: Int,
-    val expectedAction: String,
     val taskDescription: String
 )

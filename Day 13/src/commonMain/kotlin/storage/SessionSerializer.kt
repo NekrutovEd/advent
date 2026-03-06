@@ -108,7 +108,6 @@ object SessionSerializer {
                         isPaused = chat.taskTracker.isPaused,
                         steps = chat.taskTracker.steps.map { TaskStepDto(it.description, it.completed) },
                         currentStepIndex = chat.taskTracker.currentStepIndex,
-                        expectedAction = chat.taskTracker.expectedAction,
                         taskDescription = chat.taskTracker.taskDescription
                     ),
                     visibleOptions = chat.visibleOptions.map { it.name },
@@ -152,7 +151,6 @@ object SessionSerializer {
             chat.taskTracker.isPaused = tt.isPaused
             chat.taskTracker.steps.addAll(tt.steps.map { TaskStep(it.description, it.completed) })
             chat.taskTracker.currentStepIndex = tt.currentStepIndex
-            chat.taskTracker.expectedAction = tt.expectedAction
             chat.taskTracker.taskDescription = tt.taskDescription
             chat.visibleOptions = chatDto.visibleOptions.mapNotNull { name ->
                 // Backward compat: map old HISTORY/SUMMARIZATION to CONTEXT

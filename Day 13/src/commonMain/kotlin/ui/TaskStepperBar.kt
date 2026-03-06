@@ -172,14 +172,21 @@ fun TaskStepperBar(
                     }
                 }
 
-                // Expected action
-                if (taskTracker.expectedAction.isNotBlank()) {
+                // Phase action label
+                val actionLabel = when (phase) {
+                    TaskPhase.PLANNING -> s.taskPlanning + "..."
+                    TaskPhase.EXECUTION -> s.taskExecution + "..."
+                    TaskPhase.VALIDATION -> s.taskValidation + "..."
+                    TaskPhase.DONE -> s.taskDone
+                    TaskPhase.IDLE -> ""
+                }
+                if (actionLabel.isNotBlank()) {
                     Text(
-                        text = "${s.taskExpected}: ${taskTracker.expectedAction}",
+                        text = actionLabel,
                         style = MaterialTheme.typography.labelSmall,
                         color = colorScheme.tertiary,
                         modifier = Modifier.padding(top = 2.dp),
-                        maxLines = 2,
+                        maxLines = 1,
                         overflow = TextOverflow.Ellipsis
                     )
                 }

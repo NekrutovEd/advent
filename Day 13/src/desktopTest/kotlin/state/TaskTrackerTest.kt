@@ -73,7 +73,6 @@ class TaskTrackerTest {
         assertFalse(tracker.isPaused)
         assertTrue(tracker.steps.isEmpty())
         assertEquals(0, tracker.currentStepIndex)
-        assertEquals("", tracker.expectedAction)
         assertEquals("", tracker.taskDescription)
     }
 
@@ -93,7 +92,6 @@ class TaskTrackerTest {
         tracker.isPaused = true
         tracker.steps.add(TaskStep("step1", true))
         tracker.currentStepIndex = 1
-        tracker.expectedAction = "something"
         tracker.taskDescription = "Build app"
 
         tracker.reset()
@@ -102,7 +100,6 @@ class TaskTrackerTest {
         assertFalse(tracker.isPaused)
         assertTrue(tracker.steps.isEmpty())
         assertEquals(0, tracker.currentStepIndex)
-        assertEquals("", tracker.expectedAction)
         assertEquals("", tracker.taskDescription)
     }
 
@@ -113,8 +110,7 @@ class TaskTrackerTest {
         val tracker = TaskTracker()
         val ctx = tracker.toContextString(Lang.EN)
         assertTrue(ctx.contains("[Task Flow Rules]"))
-        assertTrue(ctx.contains("Execute"))
-        assertTrue(ctx.contains("Do NOT stop"))
+        assertTrue(ctx.contains("Complete the ENTIRE task"))
     }
 
     @Test
@@ -122,45 +118,22 @@ class TaskTrackerTest {
         val tracker = TaskTracker()
         tracker.phase = TaskPhase.EXECUTION
         tracker.taskDescription = "Build login page"
-        tracker.expectedAction = "Write HTML template"
 
         val ctx = tracker.toContextString(Lang.EN)
         assertTrue(ctx.contains("[Task State]"))
         assertTrue(ctx.contains("Build login page"))
         assertTrue(ctx.contains("EXECUTION"))
-        assertTrue(ctx.contains("Write HTML template"))
     }
 
     @Test
-    fun `toContextString includes pause instructions`() {
+    fun `toContextString includes pause instructions when paused`() {
         val tracker = TaskTracker()
         tracker.phase = TaskPhase.PLANNING
         tracker.isPaused = true
 
         val ctx = tracker.toContextString(Lang.EN)
-        assertTrue(ctx.contains("PAUSED"))
+        assertTrue(ctx.contains("Task Resumed"))
         assertTrue(ctx.contains("Continue from where you left off"))
-    }
-
-    @Test
-    fun `toContextString for EXECUTION says proceed without stopping`() {
-        val tracker = TaskTracker()
-        tracker.phase = TaskPhase.EXECUTION
-        tracker.taskDescription = "Build feature"
-
-        val ctx = tracker.toContextString(Lang.EN)
-        assertTrue(ctx.contains("EXECUTION"))
-        assertTrue(ctx.contains("WITHOUT stopping"))
-    }
-
-    @Test
-    fun `toContextString for PLANNING says proceed without stopping`() {
-        val tracker = TaskTracker()
-        tracker.phase = TaskPhase.PLANNING
-
-        val ctx = tracker.toContextString(Lang.EN)
-        assertTrue(ctx.contains("PLANNING"))
-        assertTrue(ctx.contains("Do NOT wait for user confirmation"))
     }
 
     @Test
@@ -178,6 +151,79 @@ class TaskTrackerTest {
         assertTrue(ctx.contains("[x] Define API"))
         assertTrue(ctx.contains("[>] Write code"))
         assertTrue(ctx.contains("[ ] Add tests"))
+    }
+
+    // --- No-pause behavior tests ---
+
+    @Test
+    fun `toContextString IDLE contains no-stop flow rules`() {
+        val tracker = TaskTracker()
+        val ctx = tracker.toContextString(Lang.EN)
+        assertTrue(ctx.contains("Complete the ENTIRE task in a SINGLE response"))
+        assertTrue(ctx.contains("Never stop to ask for confirmation"))
+        assertTrue(ctx.contains("Never ask 'should I proceed?'"))
+    }
+
+    @Test
+    fun `toContextString non-IDLE non-paused contains flow rules`() {
+        val tracker = TaskTracker()
+        tracker.phase = TaskPhase.EXECUTION
+        tracker.taskDescription = "Build feature"
+
+        val ctx = tracker.toContextString(Lang.EN)
+        assertTrue(ctx.contains("[Task Flow Rules]"))
+        assertTrue(ctx.contains("Complete the ENTIRE task in a SINGLE response"))
+        assertTrue(ctx.contains("Never stop to ask for confirmation"))
+    }
+
+    @Test
+    fun `toContextString never contains wait or confirm language when not paused`() {
+        // The flow rules contain anti-instructions like "Never ask 'should I proceed?'"
+        // We verify the context never *instructs* the AI to wait/pause (outside of anti-instructions)
+        for (phase in listOf(TaskPhase.IDLE, TaskPhase.PLANNING, TaskPhase.EXECUTION, TaskPhase.VALIDATION, TaskPhase.DONE)) {
+            val tracker = TaskTracker()
+            tracker.phase = phase
+            tracker.taskDescription = "Some task"
+
+            val ctx = tracker.toContextString(Lang.EN).lowercase()
+            // Must not contain language that tells the AI to wait
+            assertFalse(ctx.contains("waiting for user"), "Phase $phase should not contain 'waiting for user'")
+            assertFalse(ctx.contains("awaiting user"), "Phase $phase should not contain 'awaiting user'")
+            assertFalse(ctx.contains("wait for confirmation"), "Phase $phase should not contain 'wait for confirmation'")
+            // The flow rules should always say "Never stop" — never the opposite
+            assertFalse(ctx.contains("stop and ask"), "Phase $phase should not contain 'stop and ask'")
+        }
+    }
+
+    @Test
+    fun `only manual pause sets isPaused`() {
+        val tracker = TaskTracker()
+        // Phase transitions never set isPaused
+        tracker.phase = TaskPhase.PLANNING
+        assertFalse(tracker.isPaused)
+        tracker.phase = TaskPhase.EXECUTION
+        assertFalse(tracker.isPaused)
+        tracker.phase = TaskPhase.VALIDATION
+        assertFalse(tracker.isPaused)
+        tracker.phase = TaskPhase.DONE
+        assertFalse(tracker.isPaused)
+
+        // Only explicit pause() sets it
+        tracker.pause()
+        assertTrue(tracker.isPaused)
+    }
+
+    @Test
+    fun `phaseActionLabel returns localized labels without wait language`() {
+        val tracker = TaskTracker()
+        for (phase in TaskPhase.entries) {
+            tracker.phase = phase
+            val labelEn = tracker.phaseActionLabel(Lang.EN).lowercase()
+            val labelRu = tracker.phaseActionLabel(Lang.RU).lowercase()
+            assertFalse(labelEn.contains("wait"), "EN label for $phase should not contain 'wait'")
+            assertFalse(labelEn.contains("confirm"), "EN label for $phase should not contain 'confirm'")
+            assertFalse(labelRu.contains("ожида"), "RU label for $phase should not contain 'ожида'")
+        }
     }
 
     // --- Task tracking enabled by default ---
@@ -206,7 +252,7 @@ class TaskTrackerTest {
         // First enqueue the main response
         enqueueSuccess("Let me plan the implementation. Step 1: Design the API.")
         // Then enqueue the task extraction response
-        val taskJson = """{"phase":"planning","task_description":"Design API","steps":["Gather requirements","Design endpoints"],"current_step":0,"completed_steps":[],"expected_action":"Gather requirements"}"""
+        val taskJson = """{"phase":"planning","task_description":"Design API","steps":["Gather requirements","Design endpoints"],"current_step":0,"completed_steps":[]}"""
         enqueueSuccess(taskJson)
 
         val chat = appState.activeSession.chats[0]
@@ -217,7 +263,6 @@ class TaskTrackerTest {
         assertEquals("Design API", chat.taskTracker.taskDescription)
         assertEquals(2, chat.taskTracker.steps.size)
         assertEquals("Gather requirements", chat.taskTracker.steps[0].description)
-        assertEquals("Gather requirements", chat.taskTracker.expectedAction)
     }
 
     @Test
@@ -262,7 +307,6 @@ class TaskTrackerTest {
             TaskStep("Step B", false)
         ))
         chat.taskTracker.currentStepIndex = 1
-        chat.taskTracker.expectedAction = "Waiting for review"
         chat.taskTracker.taskDescription = "Build feature X"
 
         val encoded = SessionSerializer.encodeSession(session)
@@ -275,7 +319,6 @@ class TaskTrackerTest {
         assertTrue(restoredTracker.steps[0].completed)
         assertEquals("Step B", restoredTracker.steps[1].description)
         assertEquals(1, restoredTracker.currentStepIndex)
-        assertEquals("Waiting for review", restoredTracker.expectedAction)
         assertEquals("Build feature X", restoredTracker.taskDescription)
     }
 
@@ -328,7 +371,6 @@ class TaskTrackerTest {
         chat.taskTracker.isPaused = true
         chat.taskTracker.steps.add(TaskStep("Review output", false))
         chat.taskTracker.currentStepIndex = 0
-        chat.taskTracker.expectedAction = "Check results"
         chat.taskTracker.taskDescription = "Validate feature"
         chat.taskTracking = true
 
@@ -339,7 +381,6 @@ class TaskTrackerTest {
         assertTrue(clone.taskTracker.isPaused)
         assertEquals(1, clone.taskTracker.steps.size)
         assertEquals("Review output", clone.taskTracker.steps[0].description)
-        assertEquals("Check results", clone.taskTracker.expectedAction)
         assertEquals("Validate feature", clone.taskTracker.taskDescription)
         assertTrue(clone.taskTracking)
     }

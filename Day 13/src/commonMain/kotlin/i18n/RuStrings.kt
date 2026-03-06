@@ -97,7 +97,7 @@ object RuStrings : Strings {
     override val taskResume = "Продолжить"
     override val taskReset = "Сброс"
     override val taskExtracting = "анализ..."
-    override val taskExpected = "Ожидается"
+
     override val taskPausedBanner = "Задача приостановлена. Отправьте сообщение для продолжения."
 
     // Statistics tooltip

@@ -80,7 +80,6 @@ class SessionState(
         clone.taskTracker.isPaused = source.taskTracker.isPaused
         clone.taskTracker.steps.addAll(source.taskTracker.steps)
         clone.taskTracker.currentStepIndex = source.taskTracker.currentStepIndex
-        clone.taskTracker.expectedAction = source.taskTracker.expectedAction
         clone.taskTracker.taskDescription = source.taskTracker.taskDescription
         clone.stopWords.clear()
         clone.stopWords.addAll(source.stopWords)
