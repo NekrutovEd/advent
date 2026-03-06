@@ -66,6 +66,9 @@ class ChatState(
     var extractMemory by mutableStateOf(defaultExtractMemory)
     var isExtractingMemory by mutableStateOf(false)
 
+    // Invariant checking
+    var isCheckingInvariants by mutableStateOf(false)
+
     // Task tracking
     var taskTracking by mutableStateOf(defaultTaskTracking)
     val taskTracker = TaskTracker()
@@ -309,6 +312,7 @@ class ChatState(
         workingMemoryText: String = "",
         longTermMemoryText: String = "",
         profileText: String = "",
+        invariantsText: String = "",
         lang: Lang = Lang.EN,
         onMemoryExtracted: (suspend (ExtractedMemoryResult) -> Unit)? = null
     ) {
@@ -323,7 +327,7 @@ class ChatState(
 
         // Prepend memory and task state as system messages in snapshot
         val taskContext = if (taskTracking) taskTracker.toContextString(lang) else ""
-        val memoryPreamble = buildMemoryPreamble(profileText, longTermMemoryText, workingMemoryText, taskContext)
+        val memoryPreamble = buildMemoryPreamble(profileText, longTermMemoryText, workingMemoryText, taskContext, invariantsText)
         val snapshotWithMemory = memoryPreamble + snapshotHistory
 
         val snapshot = try {
@@ -350,7 +354,7 @@ class ChatState(
             val windowedHistory = if (sendHistory) applySlidingWindow(fullHistory) else fullHistory
 
             // Prepend memory and task state
-            val apiHistory = buildMemoryPreamble(profileText, longTermMemoryText, workingMemoryText, taskContext) + windowedHistory
+            val apiHistory = buildMemoryPreamble(profileText, longTermMemoryText, workingMemoryText, taskContext, invariantsText) + windowedHistory
 
             val response = chatApi.sendMessage(
                 history = apiHistory,
@@ -366,8 +370,12 @@ class ChatState(
                 jsonSchema = jsonSchema,
                 baseUrl = baseUrl
             )
-            val assistantMessage = ChatMessage("assistant", response.content)
-            history.add(assistantMessage)
+            val violation = if (invariantsText.isNotBlank()) {
+                checkInvariants(response.content, invariantsText, apiKey, model, temperature, connectTimeoutSec, readTimeoutSec, baseUrl, lang)
+            } else null
+
+            val assistantMessage = ChatMessage("assistant", response.content, invariantViolation = violation)
+            history.add(ChatMessage("assistant", response.content))
             messages.add(assistantMessage)
 
             if (response.usage != null) {
@@ -396,6 +404,61 @@ class ChatState(
             messages.removeLastOrNull()
         } finally {
             isLoading = false
+        }
+    }
+
+    private suspend fun checkInvariants(
+        assistantResponse: String,
+        invariantsText: String,
+        apiKey: String,
+        model: String,
+        temperature: Double?,
+        connectTimeoutSec: Int?,
+        readTimeoutSec: Int?,
+        baseUrl: String? = null,
+        lang: Lang = Lang.EN
+    ): String? {
+        isCheckingInvariants = true
+        try {
+            val langInstruction = when (lang) {
+                Lang.EN -> "Write the violation description in English."
+                Lang.RU -> "Write the violation description in Russian (на русском языке)."
+            }
+            val prompt = buildString {
+                appendLine("Check if the following assistant response violates any of these invariants.")
+                appendLine()
+                appendLine("INVARIANTS:")
+                appendLine(invariantsText)
+                appendLine()
+                appendLine("ASSISTANT RESPONSE:")
+                appendLine(assistantResponse)
+                appendLine()
+                appendLine("$langInstruction")
+                appendLine("Return JSON: {\"violated\": true/false, \"description\": \"which invariant was violated and how, or empty string if none\"}")
+            }
+            val response = chatApi.sendMessage(
+                history = listOf(ChatMessage("user", prompt)),
+                apiKey = apiKey,
+                model = model,
+                temperature = temperature,
+                maxTokens = 300,
+                systemPrompt = "You are a strict invariant checker. Analyze the assistant response against the given invariants. Output only valid JSON.",
+                connectTimeoutSec = connectTimeoutSec,
+                readTimeoutSec = readTimeoutSec,
+                stop = null,
+                responseFormat = "json_object",
+                jsonSchema = null,
+                baseUrl = baseUrl
+            )
+            val jsonElement = memoryJson.parseToJsonElement(response.content.trim())
+            val obj = jsonElement.jsonObject
+            val violated = obj["violated"]?.jsonPrimitive?.content?.toBooleanStrictOrNull() ?: false
+            if (!violated) return null
+            return obj["description"]?.jsonPrimitive?.content?.takeIf { it.isNotBlank() }
+        } catch (_: Exception) {
+            return null
+        } finally {
+            isCheckingInvariants = false
         }
     }
 
@@ -429,7 +492,7 @@ class ChatState(
         }
     }
 
-    private fun buildMemoryPreamble(profileText: String, longTermMemoryText: String, workingMemoryText: String, taskContext: String = ""): List<ChatMessage> {
+    private fun buildMemoryPreamble(profileText: String, longTermMemoryText: String, workingMemoryText: String, taskContext: String = "", invariantsText: String = ""): List<ChatMessage> {
         return buildList {
             if (profileText.isNotBlank()) {
                 add(ChatMessage("system", "[Active Profile]\n$profileText"))
@@ -439,6 +502,9 @@ class ChatState(
             }
             if (workingMemoryText.isNotBlank()) {
                 add(ChatMessage("system", "[Task Context]\n$workingMemoryText"))
+            }
+            if (invariantsText.isNotBlank()) {
+                add(ChatMessage("system", "[INVARIANTS — MUST NOT BE VIOLATED]\nThe following invariants are absolute constraints. You MUST respect them in every response. If the user's request conflicts with an invariant, explain the conflict and refuse to violate the invariant.\n$invariantsText"))
             }
             if (taskContext.isNotBlank()) {
                 add(ChatMessage("system", taskContext))
@@ -458,6 +524,7 @@ class ChatState(
         totalCompletionTokens = 0
         totalTokens = 0
         isExtractingMemory = false
+        isCheckingInvariants = false
         taskTracker.reset()
     }
 }

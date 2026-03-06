@@ -100,6 +100,14 @@ object RuStrings : Strings {
 
     override val taskPausedBanner = "Задача приостановлена. Отправьте сообщение для продолжения."
 
+    // Invariants
+    override val invariantsTab = "Инварианты"
+    override val invariantsScopeLabel = "проверяются после каждого ответа"
+    override val addInvariantPlaceholder = "Добавить инвариант..."
+    override val noInvariants = "Нет инвариантов"
+    override val invariantViolationLabel = "Нарушение инварианта"
+    override val checkingInvariants = "Проверка инвариантов..."
+
     // Statistics tooltip
     override val lastRequest = "Последний запрос"
     override val sessionTotal = "Итого за сессию"

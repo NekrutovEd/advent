@@ -253,6 +253,10 @@ fun App(appState: AppState) {
                                 onRemoveLongTermItem = { appState.removeLongTermMemoryItem(it) },
                                 onEditLongTermItem = { id, text -> appState.updateLongTermMemoryItem(id, text) },
                                 onPromoteItem = { appState.promoteToLongTerm(activeSession, it, appState.currentTimeMs()) },
+                                invariants = appState.invariants,
+                                onAddInvariant = { appState.addInvariant(it, appState.currentTimeMs()) },
+                                onRemoveInvariant = { appState.removeInvariant(it) },
+                                onEditInvariant = { id, text -> appState.updateInvariant(id, text) },
                                 modifier = Modifier.width(280.dp).fillMaxHeight()
                             )
                         }

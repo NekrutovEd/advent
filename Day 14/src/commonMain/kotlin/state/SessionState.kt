@@ -100,6 +100,7 @@ class SessionState(
         scope: CoroutineScope,
         longTermMemoryText: String = "",
         profileText: String = "",
+        invariantsText: String = "",
         timestamp: Long = 0L,
         onLongTermExtracted: ((List<String>) -> Unit)? = null
     ): List<Job> {
@@ -131,6 +132,7 @@ class SessionState(
                     workingMemoryText = wmText,
                     longTermMemoryText = longTermMemoryText,
                     profileText = profileText,
+                    invariantsText = invariantsText,
                     lang = settings.lang,
                     onMemoryExtracted = { result ->
                         result.workingItems.forEach { addWorkingMemoryItem(it, MemorySource.AUTO_EXTRACTED, timestamp) }
@@ -149,6 +151,7 @@ class SessionState(
         scope: CoroutineScope,
         longTermMemoryText: String = "",
         profileText: String = "",
+        invariantsText: String = "",
         timestamp: Long = 0L,
         onLongTermExtracted: ((List<String>) -> Unit)? = null
     ): Job? {
@@ -176,6 +179,7 @@ class SessionState(
                 workingMemoryText = wmText,
                 longTermMemoryText = longTermMemoryText,
                 profileText = profileText,
+                invariantsText = invariantsText,
                 lang = settings.lang,
                 onMemoryExtracted = { result ->
                     result.workingItems.forEach { addWorkingMemoryItem(it, MemorySource.AUTO_EXTRACTED, timestamp) }

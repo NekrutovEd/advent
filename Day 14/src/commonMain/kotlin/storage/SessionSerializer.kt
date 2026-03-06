@@ -3,6 +3,7 @@ package storage
 import kotlinx.serialization.encodeToString
 import kotlinx.serialization.json.Json
 import state.AppState
+import state.InvariantItem
 import state.MemoryItem
 import state.MemorySource
 import state.SessionState
@@ -21,7 +22,8 @@ object SessionSerializer {
             archivedSessions = appState.archivedSessions.toList(),
             longTermMemory = appState.longTermMemory.map { MemoryItemDto(it.id, it.content, it.source.name, it.timestamp) },
             profiles = appState.profiles.map { UserProfileDto(it.id, it.name, it.items.toList(), it.isNameCustom) },
-            activeProfileId = appState.activeProfileId
+            activeProfileId = appState.activeProfileId,
+            invariants = appState.invariants.map { InvariantItemDto(it.id, it.content, it.timestamp) }
         )
         return json.encodeToString(dto)
     }
@@ -57,6 +59,12 @@ object SessionSerializer {
                 ))
             }
             appState.activeProfileId = dto.activeProfileId
+
+            // Restore invariants
+            appState.invariants.clear()
+            dto.invariants.forEach { invDto ->
+                appState.invariants.add(InvariantItem(id = invDto.id, content = invDto.content, timestamp = invDto.timestamp))
+            }
         } catch (_: Exception) {
             // Leave state as-is on parse failure
         }

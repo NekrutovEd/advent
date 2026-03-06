@@ -15,6 +15,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import i18n.LocalStrings
+import state.InvariantItem
 import state.MemoryItem
 import state.MemorySource
 
@@ -29,6 +30,10 @@ fun MemoryPanel(
     onRemoveLongTermItem: (String) -> Unit,
     onEditLongTermItem: (String, String) -> Unit,
     onPromoteItem: (String) -> Unit,
+    invariants: List<InvariantItem>,
+    onAddInvariant: (String) -> Unit,
+    onRemoveInvariant: (String) -> Unit,
+    onEditInvariant: (String, String) -> Unit,
     modifier: Modifier = Modifier
 ) {
     val s = LocalStrings.current
@@ -62,6 +67,19 @@ fun MemoryPanel(
                     )
                 }
             }
+            Tab(selected = selectedTab == 2, onClick = { selectedTab = 2 }) {
+                Column(
+                    horizontalAlignment = Alignment.CenterHorizontally,
+                    modifier = Modifier.padding(vertical = 6.dp)
+                ) {
+                    Text(s.invariantsTab, style = MaterialTheme.typography.labelSmall)
+                    Text(
+                        s.invariantsScopeLabel,
+                        style = MaterialTheme.typography.labelSmall.copy(fontSize = 9.sp),
+                        color = MaterialTheme.colorScheme.outline
+                    )
+                }
+            }
         }
 
         // Tab content
@@ -81,13 +99,20 @@ fun MemoryPanel(
                     onEdit = onEditLongTermItem,
                     onPromote = null
                 )
+                2 -> InvariantListTab(
+                    items = invariants,
+                    onAdd = onAddInvariant,
+                    onRemove = onRemoveInvariant,
+                    onEdit = onEditInvariant
+                )
             }
         }
 
         // Token estimate footer
         HorizontalDivider(modifier = Modifier.padding(vertical = 2.dp))
-        val allItems = workingMemory + longTermMemory
-        val tokenEstimate = allItems.sumOf { it.content.length } / 4
+        val memoryChars = (workingMemory + longTermMemory).sumOf { it.content.length }
+        val invariantChars = invariants.sumOf { it.content.length }
+        val tokenEstimate = (memoryChars + invariantChars) / 4
         Text(
             s.memoryTokenEstimate(tokenEstimate),
             style = MaterialTheme.typography.labelSmall,
@@ -144,6 +169,104 @@ private fun MemoryListTab(
             LazyColumn(modifier = Modifier.fillMaxSize()) {
                 items(items, key = { it.id }) { item ->
                     MemoryItemRow(item, onRemove, onEdit, onPromote)
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun InvariantListTab(
+    items: List<InvariantItem>,
+    onAdd: (String) -> Unit,
+    onRemove: (String) -> Unit,
+    onEdit: (String, String) -> Unit
+) {
+    val s = LocalStrings.current
+    var newItemText by remember { mutableStateOf("") }
+
+    Column(modifier = Modifier.fillMaxSize()) {
+        Row(
+            modifier = Modifier.fillMaxWidth().padding(4.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            OutlinedTextField(
+                value = newItemText,
+                onValueChange = { newItemText = it },
+                placeholder = { Text(s.addInvariantPlaceholder, style = MaterialTheme.typography.bodySmall) },
+                singleLine = true,
+                modifier = Modifier.weight(1f),
+                textStyle = MaterialTheme.typography.bodySmall
+            )
+            Spacer(Modifier.width(4.dp))
+            TextButton(
+                onClick = {
+                    if (newItemText.isNotBlank()) {
+                        onAdd(newItemText.trim())
+                        newItemText = ""
+                    }
+                },
+                enabled = newItemText.isNotBlank()
+            ) {
+                Text("+")
+            }
+        }
+
+        if (items.isEmpty()) {
+            Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                Text(s.noInvariants, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.outline)
+            }
+        } else {
+            LazyColumn(modifier = Modifier.fillMaxSize()) {
+                items(items, key = { it.id }) { item ->
+                    InvariantItemRow(item, onRemove, onEdit)
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun InvariantItemRow(
+    item: InvariantItem,
+    onRemove: (String) -> Unit,
+    onEdit: (String, String) -> Unit
+) {
+    val s = LocalStrings.current
+    var isEditing by remember { mutableStateOf(false) }
+    var editText by remember(item.content) { mutableStateOf(item.content) }
+
+    Card(
+        modifier = Modifier.fillMaxWidth().padding(2.dp),
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.errorContainer.copy(alpha = 0.3f))
+    ) {
+        Column(modifier = Modifier.padding(6.dp)) {
+            if (isEditing) {
+                OutlinedTextField(
+                    value = editText,
+                    onValueChange = { editText = it },
+                    modifier = Modifier.fillMaxWidth(),
+                    textStyle = MaterialTheme.typography.bodySmall,
+                    maxLines = 3
+                )
+                Row {
+                    TextButton(onClick = {
+                        onEdit(item.id, editText.trim())
+                        isEditing = false
+                    }) { Text(s.save, style = MaterialTheme.typography.labelSmall) }
+                    TextButton(onClick = { isEditing = false; editText = item.content }) {
+                        Text(s.cancel, style = MaterialTheme.typography.labelSmall)
+                    }
+                }
+            } else {
+                Text(item.content, style = MaterialTheme.typography.bodySmall)
+                Row {
+                    IconButton(onClick = { isEditing = true }, modifier = Modifier.size(32.dp)) {
+                        Icon(Icons.Default.Edit, contentDescription = null, modifier = Modifier.size(18.dp))
+                    }
+                    IconButton(onClick = { onRemove(item.id) }, modifier = Modifier.size(32.dp)) {
+                        Icon(Icons.Default.Delete, contentDescription = null, modifier = Modifier.size(18.dp))
+                    }
                 }
             }
         }

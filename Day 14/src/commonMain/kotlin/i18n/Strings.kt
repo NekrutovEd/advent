@@ -100,6 +100,14 @@ interface Strings {
 
     val taskPausedBanner: String
 
+    // Invariants
+    val invariantsTab: String
+    val invariantsScopeLabel: String
+    val addInvariantPlaceholder: String
+    val noInvariants: String
+    val invariantViolationLabel: String
+    val checkingInvariants: String
+
     // Statistics tooltip
     val lastRequest: String
     val sessionTotal: String

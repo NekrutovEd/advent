@@ -354,6 +354,14 @@ fun ChatPanel(
                 }
             }
 
+            if (chatState.isCheckingInvariants) {
+                Text(
+                    text = s.checkingInvariants,
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.error,
+                    modifier = Modifier.align(Alignment.BottomCenter).padding(bottom = 48.dp)
+                )
+            }
             if (chatState.isSummarizing) {
                 Text(
                     text = s.summarizing,

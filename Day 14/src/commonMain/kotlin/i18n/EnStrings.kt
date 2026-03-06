@@ -100,6 +100,14 @@ object EnStrings : Strings {
 
     override val taskPausedBanner = "Task paused. Send a message to resume."
 
+    // Invariants
+    override val invariantsTab = "Invariants"
+    override val invariantsScopeLabel = "checked after each response"
+    override val addInvariantPlaceholder = "Add invariant..."
+    override val noInvariants = "No invariants"
+    override val invariantViolationLabel = "Invariant violation"
+    override val checkingInvariants = "Checking invariants..."
+
     // Statistics tooltip
     override val lastRequest = "Last request"
     override val sessionTotal = "Session total"

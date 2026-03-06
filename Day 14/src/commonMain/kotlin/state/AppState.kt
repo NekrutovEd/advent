@@ -26,6 +26,7 @@ class AppState(
     var showSettings by mutableStateOf(false)
 
     val longTermMemory = mutableStateListOf<MemoryItem>()
+    val invariants = mutableStateListOf<InvariantItem>()
     var showMemoryPanel by mutableStateOf(false)
 
     // User profiles
@@ -60,6 +61,27 @@ class AppState(
 
     fun longTermMemoryText(): String =
         longTermMemory.joinToString("\n") { "- ${it.content}" }
+
+    // Invariant CRUD
+    fun addInvariant(content: String, timestamp: Long): InvariantItem {
+        val item = InvariantItem(id = buildMemoryId(), content = content, timestamp = timestamp)
+        invariants.add(item)
+        return item
+    }
+
+    fun removeInvariant(itemId: String) {
+        invariants.removeAll { it.id == itemId }
+    }
+
+    fun updateInvariant(itemId: String, newContent: String) {
+        val index = invariants.indexOfFirst { it.id == itemId }
+        if (index >= 0) {
+            invariants[index] = invariants[index].copy(content = newContent)
+        }
+    }
+
+    fun invariantsText(): String =
+        invariants.joinToString("\n") { "- ${it.content}" }
 
     // Profile CRUD
     fun addProfile(): UserProfile {
@@ -134,6 +156,7 @@ class AppState(
             prompt, scope,
             longTermMemoryText = longTermMemoryText(),
             profileText = activeProfileText(),
+            invariantsText = invariantsText(),
             timestamp = currentTimeMs(),
             onLongTermExtracted = { items ->
                 items.forEach { addLongTermMemoryItem(it, MemorySource.AUTO_EXTRACTED, currentTimeMs()) }
@@ -145,6 +168,7 @@ class AppState(
             chat, prompt, scope,
             longTermMemoryText = longTermMemoryText(),
             profileText = activeProfileText(),
+            invariantsText = invariantsText(),
             timestamp = currentTimeMs(),
             onLongTermExtracted = { items ->
                 items.forEach { addLongTermMemoryItem(it, MemorySource.AUTO_EXTRACTED, currentTimeMs()) }
@@ -239,6 +263,11 @@ class AppState(
             ))
         }
         activeProfileId = dto.activeProfileId
+
+        // Restore invariants
+        dto.invariants.forEach { invDto ->
+            invariants.add(InvariantItem(id = invDto.id, content = invDto.content, timestamp = invDto.timestamp))
+        }
     }
 
     /** Auto-renames a "New" session using the cheapest available model. */

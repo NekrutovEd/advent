@@ -75,6 +75,29 @@ fun MessageBubble(message: ChatMessage) {
                     )
                 }
 
+                // Invariant violation banner
+                if (!isUser && message.invariantViolation != null) {
+                    val s = LocalStrings.current
+                    Surface(
+                        color = MaterialTheme.colorScheme.errorContainer,
+                        shape = RoundedCornerShape(6.dp),
+                        modifier = Modifier.fillMaxWidth().padding(horizontal = 8.dp, vertical = 4.dp)
+                    ) {
+                        Column(modifier = Modifier.padding(8.dp)) {
+                            Text(
+                                text = s.invariantViolationLabel,
+                                style = MaterialTheme.typography.labelSmall,
+                                color = MaterialTheme.colorScheme.error
+                            )
+                            Text(
+                                text = message.invariantViolation,
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onErrorContainer
+                            )
+                        }
+                    }
+                }
+
                 // Message text
                 SelectionContainer {
                     Text(

@@ -72,11 +72,19 @@ data class UserProfileDto(
 )
 
 @Serializable
+data class InvariantItemDto(
+    val id: String,
+    val content: String,
+    val timestamp: Long
+)
+
+@Serializable
 data class AppStateDto(
     val activeSessionIndex: Int,
     val sessions: List<SessionDto>,
     val archivedSessions: List<ArchivedSessionDto>,
     val longTermMemory: List<MemoryItemDto> = emptyList(),
     val profiles: List<UserProfileDto> = emptyList(),
-    val activeProfileId: String? = null
+    val activeProfileId: String? = null,
+    val invariants: List<InvariantItemDto> = emptyList()
 )
