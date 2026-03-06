@@ -125,30 +125,34 @@ class TaskTracker {
                 appendLine(langInstruction)
                 appendLine()
                 recent.forEach { msg ->
-                    appendLine("${msg.role}: ${msg.content.take(500)}")
+                    val content = msg.content
+                    // Show beginning + end of long messages so we can detect completion
+                    val truncated = if (content.length > 1000) {
+                        content.take(600) + "\n...[truncated]...\n" + content.takeLast(400)
+                    } else {
+                        content
+                    }
+                    appendLine("${msg.role}: $truncated")
                 }
                 appendLine()
-                appendLine("PHASE RULES (the assistant should never stop between phases):")
-                appendLine("- idle: no task, casual conversation")
-                appendLine("- planning: the assistant outlined/stated the approach (even briefly)")
-                appendLine("- execution: the assistant is actively doing the work (the main phase)")
-                appendLine("- validation: the assistant is reviewing or verifying the result")
-                appendLine("- done: task complete, final result presented")
-                appendLine("- The assistant completes all phases in one response. Detect the LAST phase reached.")
-                appendLine("- If the response contains a plan AND execution, the phase is execution (not planning).")
-                appendLine("- If the response contains execution AND verification, the phase is validation.")
-                appendLine("- If the task is fully complete, the phase is done.")
+                appendLine("CRITICAL PHASE RULES:")
+                appendLine("- idle: casual conversation, greetings, simple Q&A with no multi-step task")
+                appendLine("- planning: assistant ONLY stated an approach but did NOT start work yet")
+                appendLine("- execution: assistant is actively doing the work")
+                appendLine("- validation: assistant is reviewing/verifying the result")
+                appendLine("- done: assistant provided a complete answer or finished the task")
                 appendLine()
-                appendLine("Determine:")
-                appendLine("1. task_description: brief description of the overall task (empty if just chatting)")
-                appendLine("2. phase: one of idle/planning/execution/validation/done (the LAST phase reached)")
-                appendLine("3. steps: array of sub-step descriptions for the overall task (max 5)")
-                appendLine("4. current_step: 0-based index of the active step")
-                appendLine("5. completed_steps: array of 0-based indices of completed steps")
+                appendLine("IMPORTANT: Detect the LAST phase the assistant reached in their response:")
+                appendLine("- If the assistant provided a complete answer → done")
+                appendLine("- If the response contains a plan AND actual work → execution (NOT planning)")
+                appendLine("- If the response contains work AND a conclusion → done")
+                appendLine("- planning is ONLY when the assistant outlined steps but did NOT execute any")
+                appendLine("- When in doubt between planning and done, choose done")
+                appendLine("- Most single-response answers are done, not planning")
                 appendLine()
                 appendLine("Return JSON only:")
                 appendLine("""{"task_description":"...","phase":"...","steps":["..."],"current_step":0,"completed_steps":[0]}""")
-                appendLine("If it's casual conversation with no task, return {\"phase\":\"idle\"}")
+                appendLine("If idle, return {\"phase\":\"idle\"}")
             }
 
             return try {

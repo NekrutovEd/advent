@@ -383,6 +383,11 @@ class ChatState(
                 onMemoryExtracted?.invoke(result)
             }
 
+            // Auto-resume when user sends a message while paused
+            if (taskTracker.isPaused) {
+                taskTracker.resume()
+            }
+
             // Extract task state after successful response
             extractTaskStateIfNeeded(apiKey, model, temperature, connectTimeoutSec, readTimeoutSec, baseUrl, lang)
         } catch (e: Exception) {

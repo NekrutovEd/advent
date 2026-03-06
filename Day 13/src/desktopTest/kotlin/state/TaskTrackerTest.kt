@@ -266,18 +266,22 @@ class TaskTrackerTest {
     }
 
     @Test
-    fun `task extraction skipped when paused`() = runTest {
-        enqueueSuccess("Sure, continuing...")
+    fun `sending message auto-resumes paused tracker and extracts`() = runTest {
+        enqueueSuccess("Sure, continuing the work...")
+        val taskJson = """{"phase":"execution","task_description":"Build API","steps":["Design","Implement"],"current_step":1,"completed_steps":[0]}"""
+        enqueueSuccess(taskJson)
 
         val chat = appState.activeSession.chats[0]
-        chat.taskTracker.phase = TaskPhase.EXECUTION
+        chat.taskTracking = true
+        chat.taskTracker.phase = TaskPhase.PLANNING
         chat.taskTracker.isPaused = true
 
-        // Pre-populate history so extraction condition is met
         chat.sendMessage("Continue", "key", "llama-3.3-70b-versatile", null, null)
 
-        // Only 1 request (main), no extraction request since paused
-        assertEquals(1, server.requestCount)
+        // isPaused should be auto-cleared
+        assertFalse(chat.taskTracker.isPaused)
+        // Extraction should have run (2 requests: main + extraction)
+        assertEquals(2, server.requestCount)
         assertEquals(TaskPhase.EXECUTION, chat.taskTracker.phase)
     }
 
