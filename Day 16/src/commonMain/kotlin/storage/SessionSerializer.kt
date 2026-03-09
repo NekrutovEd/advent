@@ -16,6 +16,36 @@ object SessionSerializer {
     internal val json = Json { ignoreUnknownKeys = true }
 
     fun encodeAll(appState: AppState): String {
+        val s = appState.settings
+        val settingsDto = SettingsDto(
+            lang = s.lang.name,
+            systemPrompt = s.systemPrompt,
+            selectedModel = s.selectedModel,
+            defaultSendHistory = s.defaultSendHistory,
+            defaultAutoSummarize = s.defaultAutoSummarize,
+            defaultSummarizeThreshold = s.defaultSummarizeThreshold,
+            defaultKeepLastMessages = s.defaultKeepLastMessages,
+            defaultSlidingWindow = s.defaultSlidingWindow,
+            defaultExtractMemory = s.defaultExtractMemory,
+            defaultTaskTracking = s.defaultTaskTracking,
+            apiConfigs = s.apiConfigs.map { c ->
+                ApiConfigDto(
+                    id = c.id,
+                    temperature = c.temperature,
+                    maxTokens = c.maxTokens,
+                    connectTimeout = c.connectTimeout,
+                    readTimeout = c.readTimeout
+                )
+            }
+        )
+        val mcpDto = appState.mcpState?.let { mcp ->
+            McpConfigDto(
+                serverCommand = mcp.serverCommand,
+                serverArgs = mcp.serverArgs,
+                autoConnect = mcp.isConnected
+            )
+        } ?: McpConfigDto()
+
         val dto = AppStateDto(
             activeSessionIndex = appState.activeSessionIndex,
             sessions = appState.sessions.map { encodeSessionToDto(it) },
@@ -23,7 +53,9 @@ object SessionSerializer {
             longTermMemory = appState.longTermMemory.map { MemoryItemDto(it.id, it.content, it.source.name, it.timestamp) },
             profiles = appState.profiles.map { UserProfileDto(it.id, it.name, it.items.toList(), it.isNameCustom) },
             activeProfileId = appState.activeProfileId,
-            invariants = appState.invariants.map { InvariantItemDto(it.id, it.content, it.timestamp) }
+            invariants = appState.invariants.map { InvariantItemDto(it.id, it.content, it.timestamp) },
+            settings = settingsDto,
+            mcpConfig = mcpDto
         )
         return json.encodeToString(dto)
     }

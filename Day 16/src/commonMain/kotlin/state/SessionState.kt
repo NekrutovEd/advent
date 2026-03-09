@@ -1,6 +1,7 @@
 package state
 
 import api.ChatApiInterface
+import mcp.McpTool
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateListOf
 import androidx.compose.runtime.mutableStateOf
@@ -102,7 +103,9 @@ class SessionState(
         profileText: String = "",
         invariantsText: String = "",
         timestamp: Long = 0L,
-        onLongTermExtracted: ((List<String>) -> Unit)? = null
+        onLongTermExtracted: ((List<String>) -> Unit)? = null,
+        mcpTools: List<McpTool>? = null,
+        toolExecutor: (suspend (String, String) -> String)? = null
     ): List<Job> {
         if (prompt.isBlank()) return emptyList()
 
@@ -139,7 +142,9 @@ class SessionState(
                         if (result.longTermItems.isNotEmpty()) {
                             onLongTermExtracted?.invoke(result.longTermItems)
                         }
-                    }
+                    },
+                    mcpTools = mcpTools,
+                    toolExecutor = toolExecutor
                 )
             }
         }
@@ -153,7 +158,9 @@ class SessionState(
         profileText: String = "",
         invariantsText: String = "",
         timestamp: Long = 0L,
-        onLongTermExtracted: ((List<String>) -> Unit)? = null
+        onLongTermExtracted: ((List<String>) -> Unit)? = null,
+        mcpTools: List<McpTool>? = null,
+        toolExecutor: (suspend (String, String) -> String)? = null
     ): Job? {
         if (prompt.isBlank()) return null
 
@@ -186,7 +193,9 @@ class SessionState(
                     if (result.longTermItems.isNotEmpty()) {
                         onLongTermExtracted?.invoke(result.longTermItems)
                     }
-                }
+                },
+                mcpTools = mcpTools,
+                toolExecutor = toolExecutor
             )
         }
     }

@@ -2,12 +2,14 @@ package state
 
 import api.ChatApiInterface
 import api.ChatMessage
+import api.ChatResponse
 import api.TokenUsage
 import androidx.compose.runtime.mutableStateListOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import i18n.Lang
+import mcp.McpTool
 import kotlin.random.Random
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.jsonObject
@@ -83,6 +85,8 @@ class ChatState(
     }
 
     private companion object {
+        const val MAX_TOOL_ROUNDS = 10
+
         fun buildId(): String = Random.Default.nextBytes(4).joinToString("") {
             val v = it.toInt() and 0xFF
             val h = v.toString(16)
@@ -314,7 +318,9 @@ class ChatState(
         profileText: String = "",
         invariantsText: String = "",
         lang: Lang = Lang.EN,
-        onMemoryExtracted: (suspend (ExtractedMemoryResult) -> Unit)? = null
+        onMemoryExtracted: (suspend (ExtractedMemoryResult) -> Unit)? = null,
+        mcpTools: List<McpTool>? = null,
+        toolExecutor: (suspend (String, String) -> String)? = null
     ) {
         isLoading = true
         error = null
@@ -350,26 +356,55 @@ class ChatState(
         history.add(userMessage)
 
         try {
-            val fullHistory = if (sendHistory) history.toList() else listOf(history.last())
-            val windowedHistory = if (sendHistory) applySlidingWindow(fullHistory) else fullHistory
+            val effectiveTools = mcpTools?.takeIf { it.isNotEmpty() }
 
-            // Prepend memory and task state
-            val apiHistory = buildMemoryPreamble(profileText, longTermMemoryText, workingMemoryText, taskContext, invariantsText) + windowedHistory
-
-            val response = chatApi.sendMessage(
-                history = apiHistory,
-                apiKey = apiKey,
-                model = model,
-                temperature = temperature,
-                maxTokens = maxTokens,
-                systemPrompt = systemPrompt,
-                connectTimeoutSec = connectTimeoutSec,
-                readTimeoutSec = readTimeoutSec,
-                stop = stop,
-                responseFormat = responseFormat,
-                jsonSchema = jsonSchema,
-                baseUrl = baseUrl
+            var response = sendApiRequest(
+                apiKey, model, temperature, maxTokens, systemPrompt,
+                connectTimeoutSec, readTimeoutSec, stop, responseFormat, jsonSchema,
+                baseUrl, profileText, longTermMemoryText, workingMemoryText,
+                taskContext, invariantsText, effectiveTools
             )
+            accumulateUsage(response)
+
+            // Tool call loop — max 10 rounds to prevent infinite loops
+            var toolRounds = 0
+            while (response.toolCalls != null && toolExecutor != null && toolRounds < MAX_TOOL_ROUNDS) {
+                toolRounds++
+
+                // Add assistant message with tool_calls to history
+                val assistantToolMsg = ChatMessage("assistant", "", toolCalls = response.toolCalls)
+                history.add(assistantToolMsg)
+
+                // Execute each tool call and add results
+                for (tc in response.toolCalls!!) {
+                    // Show tool call in UI
+                    messages.add(ChatMessage("tool", "\u2699 ${tc.name}", toolCallId = tc.id))
+
+                    val result = try {
+                        toolExecutor(tc.name, tc.arguments)
+                    } catch (e: Exception) {
+                        "Error: ${e.message}"
+                    }
+
+                    // Update UI bubble with result preview
+                    val lastIdx = messages.size - 1
+                    val preview = result.take(200).let { if (result.length > 200) "$it..." else it }
+                    messages[lastIdx] = ChatMessage("tool", "\u2699 ${tc.name}\n$preview", toolCallId = tc.id)
+
+                    // Add tool result to history
+                    history.add(ChatMessage("tool", result, toolCallId = tc.id))
+                }
+
+                // Send again with tool results
+                response = sendApiRequest(
+                    apiKey, model, temperature, maxTokens, systemPrompt,
+                    connectTimeoutSec, readTimeoutSec, stop, responseFormat, jsonSchema,
+                    baseUrl, profileText, longTermMemoryText, workingMemoryText,
+                    taskContext, invariantsText, effectiveTools
+                )
+                accumulateUsage(response)
+            }
+
             val violation = if (invariantsText.isNotBlank()) {
                 checkInvariants(response.content, invariantsText, apiKey, model, temperature, connectTimeoutSec, readTimeoutSec, baseUrl, lang)
             } else null
@@ -377,13 +412,6 @@ class ChatState(
             val assistantMessage = ChatMessage("assistant", response.content, invariantViolation = violation)
             history.add(ChatMessage("assistant", response.content))
             messages.add(assistantMessage)
-
-            if (response.usage != null) {
-                lastUsage = response.usage
-                totalPromptTokens += response.usage.promptTokens
-                totalCompletionTokens += response.usage.completionTokens
-                totalTokens += response.usage.totalTokens
-            }
 
             // Extract memory after successful response
             val result = extractMemoryIfNeeded(apiKey, model, temperature, connectTimeoutSec, readTimeoutSec, baseUrl, lang)
@@ -404,6 +432,36 @@ class ChatState(
             messages.removeLastOrNull()
         } finally {
             isLoading = false
+        }
+    }
+
+    private suspend fun sendApiRequest(
+        apiKey: String, model: String, temperature: Double?, maxTokens: Int?,
+        systemPrompt: String?, connectTimeoutSec: Int?, readTimeoutSec: Int?,
+        stop: List<String>?, responseFormat: String?, jsonSchema: String?,
+        baseUrl: String?, profileText: String, longTermMemoryText: String,
+        workingMemoryText: String, taskContext: String, invariantsText: String,
+        tools: List<McpTool>?
+    ): ChatResponse {
+        val fullHistory = if (sendHistory) history.toList() else listOf(history.last())
+        val windowedHistory = if (sendHistory) applySlidingWindow(fullHistory) else fullHistory
+        val apiHistory = buildMemoryPreamble(profileText, longTermMemoryText, workingMemoryText, taskContext, invariantsText) + windowedHistory
+
+        return chatApi.sendMessage(
+            history = apiHistory,
+            apiKey = apiKey, model = model, temperature = temperature, maxTokens = maxTokens,
+            systemPrompt = systemPrompt, connectTimeoutSec = connectTimeoutSec,
+            readTimeoutSec = readTimeoutSec, stop = stop, responseFormat = responseFormat,
+            jsonSchema = jsonSchema, baseUrl = baseUrl, tools = tools
+        )
+    }
+
+    private fun accumulateUsage(response: ChatResponse) {
+        if (response.usage != null) {
+            lastUsage = response.usage
+            totalPromptTokens += response.usage.promptTokens
+            totalCompletionTokens += response.usage.completionTokens
+            totalTokens += response.usage.totalTokens
         }
     }
 

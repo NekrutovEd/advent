@@ -1,5 +1,7 @@
 package api
 
+import mcp.McpTool
+
 interface ChatApiInterface {
     suspend fun sendMessage(
         history: List<ChatMessage>,
@@ -13,7 +15,8 @@ interface ChatApiInterface {
         stop: List<String>?,
         responseFormat: String?,
         jsonSchema: String?,
-        baseUrl: String? = null
+        baseUrl: String? = null,
+        tools: List<McpTool>? = null
     ): ChatResponse
 
     fun buildSnapshot(
@@ -30,4 +33,8 @@ interface ChatApiInterface {
     ): RequestSnapshot = RequestSnapshot("{}", 0, "[]", null, "{}")
 }
 
-data class ChatResponse(val content: String, val usage: TokenUsage?)
+data class ChatResponse(
+    val content: String,
+    val usage: TokenUsage?,
+    val toolCalls: List<ToolCall>? = null
+)

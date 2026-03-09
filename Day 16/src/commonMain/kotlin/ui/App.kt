@@ -33,6 +33,11 @@ fun App(appState: AppState) {
     // Load persisted state on first composition
     LaunchedEffect(Unit) {
         appState.loadFromStorage()
+        // Auto-connect MCP if it was connected last time
+        if (appState.pendingMcpAutoConnect) {
+            appState.pendingMcpAutoConnect = false
+            appState.mcpState?.connect()
+        }
     }
 
     // Auto-save every 60 seconds

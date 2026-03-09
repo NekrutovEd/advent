@@ -23,6 +23,10 @@ fun MessageBubble(message: ChatMessage) {
         SummaryBubble(message.content)
         return
     }
+    if (message.role == "tool") {
+        ToolCallBubble(message.content)
+        return
+    }
 
     val isUser = message.role == "user"
     val snapshot = message.requestSnapshot
@@ -275,5 +279,29 @@ private fun SummaryBubble(content: String) {
             }
         }
         HorizontalDivider()
+    }
+}
+
+@Composable
+private fun ToolCallBubble(content: String) {
+    Box(
+        modifier = Modifier.fillMaxWidth().padding(horizontal = 8.dp, vertical = 2.dp),
+        contentAlignment = Alignment.CenterStart
+    ) {
+        Surface(
+            shape = RoundedCornerShape(8.dp),
+            color = MaterialTheme.colorScheme.tertiaryContainer,
+            modifier = Modifier.widthIn(max = 500.dp)
+        ) {
+            SelectionContainer {
+                Text(
+                    text = content,
+                    color = MaterialTheme.colorScheme.onTertiaryContainer,
+                    style = MaterialTheme.typography.bodySmall,
+                    fontFamily = FontFamily.Monospace,
+                    modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp)
+                )
+            }
+        }
     }
 }

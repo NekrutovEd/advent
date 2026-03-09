@@ -79,6 +79,37 @@ data class InvariantItemDto(
 )
 
 @Serializable
+data class ApiConfigDto(
+    val id: String,
+    val temperature: Float = 1.0f,
+    val maxTokens: String = "",
+    val connectTimeout: String = "15",
+    val readTimeout: String = "60"
+)
+
+@Serializable
+data class SettingsDto(
+    val lang: String = "EN",
+    val systemPrompt: String = "",
+    val selectedModel: String = "llama-3.3-70b-versatile",
+    val defaultSendHistory: Boolean = true,
+    val defaultAutoSummarize: Boolean = true,
+    val defaultSummarizeThreshold: String = "10",
+    val defaultKeepLastMessages: String = "4",
+    val defaultSlidingWindow: String = "",
+    val defaultExtractMemory: Boolean = false,
+    val defaultTaskTracking: Boolean = true,
+    val apiConfigs: List<ApiConfigDto> = emptyList()
+)
+
+@Serializable
+data class McpConfigDto(
+    val serverCommand: String = "",
+    val serverArgs: String = "",
+    val autoConnect: Boolean = false
+)
+
+@Serializable
 data class AppStateDto(
     val activeSessionIndex: Int,
     val sessions: List<SessionDto>,
@@ -86,5 +117,7 @@ data class AppStateDto(
     val longTermMemory: List<MemoryItemDto> = emptyList(),
     val profiles: List<UserProfileDto> = emptyList(),
     val activeProfileId: String? = null,
-    val invariants: List<InvariantItemDto> = emptyList()
+    val invariants: List<InvariantItemDto> = emptyList(),
+    val settings: SettingsDto = SettingsDto(),
+    val mcpConfig: McpConfigDto = McpConfigDto()
 )

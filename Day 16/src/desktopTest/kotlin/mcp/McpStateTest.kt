@@ -14,6 +14,7 @@ class FakeMcpClient : McpClientInterface {
     var shouldThrow: Exception? = null
     var lastCommand: String? = null
     var lastArgs: List<String>? = null
+    var callToolResults = mutableMapOf<String, McpToolResult>()
 
     override val isConnected: Boolean get() = connected
 
@@ -28,6 +29,10 @@ class FakeMcpClient : McpClientInterface {
 
     override suspend fun listTools(): List<McpTool> {
         return toolsToReturn
+    }
+
+    override suspend fun callTool(name: String, arguments: String): McpToolResult {
+        return callToolResults[name] ?: McpToolResult("result for $name")
     }
 
     override fun disconnect() {

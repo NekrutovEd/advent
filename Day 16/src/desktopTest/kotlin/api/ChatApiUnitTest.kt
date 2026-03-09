@@ -213,4 +213,120 @@ class ChatApiUnitTest {
         """.trimIndent()
         assertNull(ChatApi.parseUsage(response))
     }
+
+    @Test
+    fun `parseToolCalls extracts tool calls from response`() {
+        val response = """
+            {
+                "choices": [{
+                    "message": {
+                        "role": "assistant",
+                        "content": null,
+                        "tool_calls": [{
+                            "id": "call_123",
+                            "type": "function",
+                            "function": {
+                                "name": "list_directory",
+                                "arguments": "{\"path\": \"/\"}"
+                            }
+                        }]
+                    }
+                }]
+            }
+        """.trimIndent()
+        val toolCalls = ChatApi.parseToolCalls(response)
+        assertNotNull(toolCalls)
+        assertEquals(1, toolCalls!!.size)
+        assertEquals("call_123", toolCalls[0].id)
+        assertEquals("list_directory", toolCalls[0].name)
+        assertEquals("{\"path\": \"/\"}", toolCalls[0].arguments)
+    }
+
+    @Test
+    fun `parseToolCalls returns null when no tool_calls`() {
+        val response = """
+            {
+                "choices": [{
+                    "message": {
+                        "role": "assistant",
+                        "content": "Hello"
+                    }
+                }]
+            }
+        """.trimIndent()
+        assertNull(ChatApi.parseToolCalls(response))
+    }
+
+    @Test
+    fun `parseFailedGeneration parses Groq format`() {
+        val text = """<function=list_directory>{"path": "/"}</function>"""
+        val calls = ChatApi.parseFailedGeneration(text)
+        assertNotNull(calls)
+        assertEquals(1, calls!!.size)
+        assertEquals("list_directory", calls[0].name)
+        assertEquals("{\"path\":\"/\"}", calls[0].arguments)
+        assertTrue(calls[0].id.startsWith("recovered_"))
+    }
+
+    @Test
+    fun `parseFailedGeneration parses multiple calls`() {
+        val text = """<function=read_file>{"path": "/a.txt"}</function>some text<function=list_directory>{"path": "/"}</function>"""
+        val calls = ChatApi.parseFailedGeneration(text)
+        assertNotNull(calls)
+        assertEquals(2, calls!!.size)
+        assertEquals("read_file", calls[0].name)
+        assertEquals("list_directory", calls[1].name)
+    }
+
+    @Test
+    fun `parseFailedGeneration returns null for no matches`() {
+        assertNull(ChatApi.parseFailedGeneration("just plain text"))
+    }
+
+    @Test
+    fun `parseFailedGeneration handles invalid JSON args`() {
+        val text = """<function=some_tool>not valid json</function>"""
+        val calls = ChatApi.parseFailedGeneration(text)
+        assertNotNull(calls)
+        assertEquals("{}", calls!![0].arguments)
+    }
+
+    @Test
+    fun `buildRequestBody includes tools when provided`() {
+        val messages = listOf(ChatMessage("user", "Hi"))
+        val tools = listOf(
+            mcp.McpTool(name = "read_file", description = "Read a file")
+        )
+        val body = ChatApi.buildRequestBody(messages, tools = tools)
+        val json = JSONObject(body)
+        assertTrue(json.has("tools"))
+        assertEquals(1, json.getJSONArray("tools").length())
+        val tool = json.getJSONArray("tools").getJSONObject(0)
+        assertEquals("function", tool.getString("type"))
+        assertEquals("read_file", tool.getJSONObject("function").getString("name"))
+        assertEquals("auto", json.getString("tool_choice"))
+    }
+
+    @Test
+    fun `buildRequestBody serializes tool_calls in assistant messages`() {
+        val messages = listOf(
+            ChatMessage("user", "List files"),
+            ChatMessage("assistant", "", toolCalls = listOf(
+                ToolCall("call_1", "list_dir", "{\"path\": \"/\"}")
+            )),
+            ChatMessage("tool", "file1.txt\nfile2.txt", toolCallId = "call_1")
+        )
+        val body = ChatApi.buildRequestBody(messages)
+        val json = JSONObject(body)
+        val msgs = json.getJSONArray("messages")
+        assertEquals(3, msgs.length())
+        // Assistant message with tool_calls
+        val assistantMsg = msgs.getJSONObject(1)
+        assertTrue(assistantMsg.has("tool_calls"))
+        assertEquals(1, assistantMsg.getJSONArray("tool_calls").length())
+        // Tool result message
+        val toolMsg = msgs.getJSONObject(2)
+        assertEquals("tool", toolMsg.getString("role"))
+        assertEquals("call_1", toolMsg.getString("tool_call_id"))
+    }
 }

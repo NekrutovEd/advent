@@ -21,6 +21,7 @@ class AppState(
     private val storage: StorageManager = NoOpStorage,
     mcpClient: McpClientInterface? = null
 ) {
+    internal val mcpClientRef: McpClientInterface? = mcpClient
     val mcpState: McpState? = mcpClient?.let { McpState(it) }
     val settings = SettingsState()
     val sessions = mutableStateListOf<SessionState>()
@@ -153,6 +154,19 @@ class AppState(
         addLongTermMemoryItem(item.content, MemorySource.PROMOTED, timestamp)
     }
 
+    // MCP helpers
+    private fun mcpToolsOrNull(): List<mcp.McpTool>? =
+        mcpState?.tools?.toList()?.takeIf { it.isNotEmpty() }
+
+    private fun mcpToolExecutor(): (suspend (String, String) -> String)? {
+        val client = mcpClientRef ?: return null
+        if (mcpState?.isConnected != true) return null
+        val executor: suspend (String, String) -> String = { name, args ->
+            client.callTool(name, args).content
+        }
+        return executor
+    }
+
     // Delegates to active session
     fun sendToAll(prompt: String, scope: CoroutineScope): List<Job> =
         activeSession.sendToAll(
@@ -163,7 +177,9 @@ class AppState(
             timestamp = currentTimeMs(),
             onLongTermExtracted = { items ->
                 items.forEach { addLongTermMemoryItem(it, MemorySource.AUTO_EXTRACTED, currentTimeMs()) }
-            }
+            },
+            mcpTools = mcpToolsOrNull(),
+            toolExecutor = mcpToolExecutor()
         )
 
     fun sendToOne(chat: ChatState, prompt: String, scope: CoroutineScope): Job? =
@@ -175,7 +191,9 @@ class AppState(
             timestamp = currentTimeMs(),
             onLongTermExtracted = { items ->
                 items.forEach { addLongTermMemoryItem(it, MemorySource.AUTO_EXTRACTED, currentTimeMs()) }
-            }
+            },
+            mcpTools = mcpToolsOrNull(),
+            toolExecutor = mcpToolExecutor()
         )
 
     // Session management
@@ -271,7 +289,39 @@ class AppState(
         dto.invariants.forEach { invDto ->
             invariants.add(InvariantItem(id = invDto.id, content = invDto.content, timestamp = invDto.timestamp))
         }
+
+        // Restore settings
+        val sd = dto.settings
+        settings.lang = runCatching { i18n.Lang.valueOf(sd.lang) }.getOrDefault(i18n.Lang.EN)
+        settings.systemPrompt = sd.systemPrompt
+        settings.selectedModel = sd.selectedModel
+        settings.defaultSendHistory = sd.defaultSendHistory
+        settings.defaultAutoSummarize = sd.defaultAutoSummarize
+        settings.defaultSummarizeThreshold = sd.defaultSummarizeThreshold
+        settings.defaultKeepLastMessages = sd.defaultKeepLastMessages
+        settings.defaultSlidingWindow = sd.defaultSlidingWindow
+        settings.defaultExtractMemory = sd.defaultExtractMemory
+        settings.defaultTaskTracking = sd.defaultTaskTracking
+        sd.apiConfigs.forEach { acd ->
+            settings.apiConfigs.firstOrNull { it.id == acd.id }?.let { config ->
+                config.temperature = acd.temperature
+                config.maxTokens = acd.maxTokens
+                config.connectTimeout = acd.connectTimeout
+                config.readTimeout = acd.readTimeout
+            }
+        }
+
+        // Restore MCP config and auto-connect
+        val mcp = dto.mcpConfig
+        mcpState?.let { state ->
+            state.serverCommand = mcp.serverCommand
+            state.serverArgs = mcp.serverArgs
+        }
+        pendingMcpAutoConnect = mcp.autoConnect && mcp.serverCommand.isNotBlank()
     }
+
+    /** Set by loadFromStorage, consumed by UI to trigger auto-connect once. */
+    var pendingMcpAutoConnect by mutableStateOf(false)
 
     /** Auto-renames a "New" session using the cheapest available model. */
     fun autoRenameSession(sessionIndex: Int, firstPrompt: String, scope: CoroutineScope) {
