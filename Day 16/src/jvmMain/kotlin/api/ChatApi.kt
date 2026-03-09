@@ -197,7 +197,7 @@ class ChatApi(
          *   <function=tool_name>{"arg": "value"}</function>
          * May contain multiple calls and/or trailing text.
          */
-        private val FAILED_GEN_REGEX = Regex("""<function=(\w+)>(.*?)</function>""", RegexOption.DOT_MATCHES_ALL)
+        private val FAILED_GEN_REGEX = Regex("""<function=(\w+)>?(.*?)</function>""", RegexOption.DOT_MATCHES_ALL)
 
         fun parseFailedGeneration(text: String): List<ToolCall>? {
             val matches = FAILED_GEN_REGEX.findAll(text).toList()
@@ -354,9 +354,9 @@ class ChatApi(
             // (Groq returns <function=name>{"args"}</function> format)
             val recovered = try {
                 val errorJson = JSONObject(body)
-                val error = errorJson.optJSONObject("error")
-                val failedGen = error?.optString("failed_generation", "")
-                    ?.takeIf { it.isNotBlank() }
+                // Groq may place failed_generation at root level or inside error object
+                val failedGen = errorJson.optString("failed_generation", "").takeIf { it.isNotBlank() }
+                    ?: errorJson.optJSONObject("error")?.optString("failed_generation", "")?.takeIf { it.isNotBlank() }
                 if (failedGen != null) parseFailedGeneration(failedGen) else null
             } catch (_: Exception) { null }
 
@@ -366,7 +366,11 @@ class ChatApi(
 
             val errorMsg = try {
                 val errorJson = JSONObject(body)
-                errorJson.optJSONObject("error")?.optString("message") ?: body
+                val msg = errorJson.optJSONObject("error")?.optString("message") ?: body
+                // Include failed_generation in error for debugging
+                val fg = errorJson.optString("failed_generation", "").takeIf { it.isNotBlank() }
+                    ?: errorJson.optJSONObject("error")?.optString("failed_generation", "")?.takeIf { it.isNotBlank() }
+                if (fg != null) "$msg\n\nFailed generation:\n$fg" else msg
             } catch (_: Exception) {
                 body
             }

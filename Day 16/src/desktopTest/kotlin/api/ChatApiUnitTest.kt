@@ -258,7 +258,7 @@ class ChatApiUnitTest {
     }
 
     @Test
-    fun `parseFailedGeneration parses Groq format`() {
+    fun `parseFailedGeneration parses Groq format with angle bracket`() {
         val text = """<function=list_directory>{"path": "/"}</function>"""
         val calls = ChatApi.parseFailedGeneration(text)
         assertNotNull(calls)
@@ -266,6 +266,16 @@ class ChatApiUnitTest {
         assertEquals("list_directory", calls[0].name)
         assertEquals("{\"path\":\"/\"}", calls[0].arguments)
         assertTrue(calls[0].id.startsWith("recovered_"))
+    }
+
+    @Test
+    fun `parseFailedGeneration parses Groq format without angle bracket`() {
+        val text = """<function=list_directory{"path": "project_directory"}</function>"""
+        val calls = ChatApi.parseFailedGeneration(text)
+        assertNotNull(calls)
+        assertEquals(1, calls!!.size)
+        assertEquals("list_directory", calls[0].name)
+        assertEquals("{\"path\":\"project_directory\"}", calls[0].arguments)
     }
 
     @Test
