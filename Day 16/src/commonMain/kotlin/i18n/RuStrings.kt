@@ -128,6 +128,20 @@ object RuStrings : Strings {
     override val clearArchive = "Очистить архив"
     override fun sessionDefaultName(n: Int) = "New"
 
+    // MCP
+    override val mcpSectionTitle = "MCP-сервер"
+    override val mcpServerCommand = "Команда (напр. npx)"
+    override val mcpServerArgs = "Аргументы"
+    override val mcpConnect = "Подключить"
+    override val mcpDisconnect = "Отключить"
+    override val mcpConnecting = "Подключение..."
+    override val mcpConnected = "Подключён"
+    override val mcpDisconnected = "Отключён"
+    override val mcpToolsTitle = "Доступные инструменты"
+    override val mcpNoTools = "Нет инструментов"
+    override fun mcpToolCount(n: Int) = "$n инструментов"
+    override fun mcpServerInfo(name: String) = "Сервер: $name"
+
     // Parameterized
     override fun stopWordPlaceholder(index: Int) = "Стоп ${index + 1}"
     override fun chatTitle(index: Int) = "Чат ${index + 1}"

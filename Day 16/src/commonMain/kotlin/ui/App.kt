@@ -267,6 +267,7 @@ fun App(appState: AppState) {
             if (appState.showSettings) {
                 SettingsDialog(
                     settings = appState.settings,
+                    mcpState = appState.mcpState,
                     onDismiss = { appState.showSettings = false }
                 )
             }

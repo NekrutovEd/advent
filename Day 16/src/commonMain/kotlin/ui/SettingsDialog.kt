@@ -12,7 +12,9 @@ import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.unit.dp
 import i18n.Lang
 import i18n.LocalStrings
+import kotlinx.coroutines.launch
 import state.ApiConfig
+import state.McpState
 import state.SettingsState
 
 private class ContextDraft(settings: SettingsState) {
@@ -36,9 +38,11 @@ private class ApiConfigDraft(config: ApiConfig) {
 @Composable
 fun SettingsDialog(
     settings: SettingsState,
+    mcpState: McpState? = null,
     onDismiss: () -> Unit
 ) {
     val s = LocalStrings.current
+    val scope = rememberCoroutineScope()
     val contextDraft = remember { ContextDraft(settings) }
     val drafts = remember { settings.apiConfigs.map { ApiConfigDraft(it) } }
     val expandedApis = remember {
@@ -241,6 +245,12 @@ fun SettingsDialog(
                         HorizontalDivider()
                     }
                 }
+
+                // MCP section
+                if (mcpState != null) {
+                    HorizontalDivider()
+                    McpSection(mcpState, s, scope)
+                }
             }
         },
         confirmButton = {
@@ -271,4 +281,104 @@ fun SettingsDialog(
             }
         }
     )
+}
+
+@Composable
+private fun McpSection(
+    mcpState: McpState,
+    s: i18n.Strings,
+    scope: kotlinx.coroutines.CoroutineScope
+) {
+    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        Text(s.mcpSectionTitle, style = MaterialTheme.typography.titleSmall)
+
+        OutlinedTextField(
+            value = mcpState.serverCommand,
+            onValueChange = { mcpState.serverCommand = it },
+            label = { Text(s.mcpServerCommand) },
+            singleLine = true,
+            enabled = !mcpState.isConnected && !mcpState.isConnecting,
+            modifier = Modifier.fillMaxWidth()
+        )
+
+        OutlinedTextField(
+            value = mcpState.serverArgs,
+            onValueChange = { mcpState.serverArgs = it },
+            label = { Text(s.mcpServerArgs) },
+            singleLine = true,
+            enabled = !mcpState.isConnected && !mcpState.isConnecting,
+            modifier = Modifier.fillMaxWidth()
+        )
+
+        Row(
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(8.dp)
+        ) {
+            if (!mcpState.isConnected) {
+                Button(
+                    onClick = { scope.launch { mcpState.connect() } },
+                    enabled = !mcpState.isConnecting && mcpState.serverCommand.isNotBlank()
+                ) {
+                    Text(if (mcpState.isConnecting) s.mcpConnecting else s.mcpConnect)
+                }
+            } else {
+                Button(onClick = { mcpState.disconnect() }) {
+                    Text(s.mcpDisconnect)
+                }
+            }
+
+            // Status indicator
+            val statusColor = when {
+                mcpState.isConnected -> MaterialTheme.colorScheme.primary
+                mcpState.error != null -> MaterialTheme.colorScheme.error
+                else -> MaterialTheme.colorScheme.onSurfaceVariant
+            }
+            val statusText = when {
+                mcpState.isConnecting -> s.mcpConnecting
+                mcpState.isConnected -> s.mcpConnected
+                else -> s.mcpDisconnected
+            }
+            Text(statusText, color = statusColor, style = MaterialTheme.typography.bodySmall)
+        }
+
+        // Server info
+        if (mcpState.serverName.isNotBlank()) {
+            Text(
+                s.mcpServerInfo(mcpState.serverName),
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+        }
+
+        // Error
+        if (mcpState.error != null) {
+            Text(
+                mcpState.error!!,
+                color = MaterialTheme.colorScheme.error,
+                style = MaterialTheme.typography.bodySmall
+            )
+        }
+
+        // Tools list
+        if (mcpState.tools.isNotEmpty()) {
+            Text(
+                "${s.mcpToolsTitle} (${s.mcpToolCount(mcpState.tools.size)})",
+                style = MaterialTheme.typography.labelMedium
+            )
+            mcpState.tools.forEach { tool ->
+                Column(modifier = Modifier.padding(start = 8.dp)) {
+                    Text(tool.name, style = MaterialTheme.typography.bodyMedium)
+                    if (tool.description.isNotBlank()) {
+                        Text(
+                            tool.description,
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
+                }
+            }
+        } else if (mcpState.isConnected) {
+            Text(s.mcpNoTools, style = MaterialTheme.typography.bodySmall)
+        }
+    }
 }

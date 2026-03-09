@@ -128,6 +128,20 @@ object EnStrings : Strings {
     override val clearArchive = "Clear archive"
     override fun sessionDefaultName(n: Int) = "New"
 
+    // MCP
+    override val mcpSectionTitle = "MCP Server"
+    override val mcpServerCommand = "Command (e.g. npx)"
+    override val mcpServerArgs = "Arguments"
+    override val mcpConnect = "Connect"
+    override val mcpDisconnect = "Disconnect"
+    override val mcpConnecting = "Connecting..."
+    override val mcpConnected = "Connected"
+    override val mcpDisconnected = "Disconnected"
+    override val mcpToolsTitle = "Available Tools"
+    override val mcpNoTools = "No tools available"
+    override fun mcpToolCount(n: Int) = "$n tools"
+    override fun mcpServerInfo(name: String) = "Server: $name"
+
     // Parameterized
     override fun stopWordPlaceholder(index: Int) = "Stop ${index + 1}"
     override fun chatTitle(index: Int) = "Chat ${index + 1}"

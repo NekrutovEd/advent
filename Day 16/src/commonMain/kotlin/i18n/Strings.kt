@@ -127,6 +127,20 @@ interface Strings {
     val clearArchive: String
     fun sessionDefaultName(n: Int): String
 
+    // MCP
+    val mcpSectionTitle: String
+    val mcpServerCommand: String
+    val mcpServerArgs: String
+    val mcpConnect: String
+    val mcpDisconnect: String
+    val mcpConnecting: String
+    val mcpConnected: String
+    val mcpDisconnected: String
+    val mcpToolsTitle: String
+    val mcpNoTools: String
+    fun mcpToolCount(n: Int): String
+    fun mcpServerInfo(name: String): String
+
     // Parameterized
     fun stopWordPlaceholder(index: Int): String
     fun chatTitle(index: Int): String

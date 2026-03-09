@@ -4,6 +4,7 @@ import androidx.compose.ui.window.Window
 import androidx.compose.ui.window.application
 import androidx.compose.ui.window.rememberWindowState
 import api.ChatApi
+import mcp.McpClient
 import state.AppState
 import storage.FileStorageManager
 import ui.App
@@ -16,7 +17,8 @@ fun main() = application {
         val fileKeys = loadApiKeysFromFile(storageDir)
         AppState(
             ChatApi(),
-            FileStorageManager(storageDir)
+            FileStorageManager(storageDir),
+            McpClient()
         ).also {
             it.settings.apiConfigs.forEach { config ->
                 val envName = "${config.id.uppercase()}_API_KEY"

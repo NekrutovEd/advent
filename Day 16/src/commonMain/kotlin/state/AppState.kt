@@ -9,6 +9,7 @@ import androidx.compose.runtime.setValue
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.launch
+import mcp.McpClientInterface
 import kotlin.random.Random
 import storage.ArchivedSessionDto
 import storage.NoOpStorage
@@ -17,8 +18,10 @@ import storage.StorageManager
 
 class AppState(
     internal val chatApi: ChatApiInterface,
-    private val storage: StorageManager = NoOpStorage
+    private val storage: StorageManager = NoOpStorage,
+    mcpClient: McpClientInterface? = null
 ) {
+    val mcpState: McpState? = mcpClient?.let { McpState(it) }
     val settings = SettingsState()
     val sessions = mutableStateListOf<SessionState>()
     val archivedSessions = mutableStateListOf<ArchivedSessionDto>()
