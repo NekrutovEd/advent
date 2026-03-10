@@ -125,3 +125,14 @@ compose.desktop {
         }
     }
 }
+
+// Task to run the Git MCP server as a standalone process
+tasks.register<JavaExec>("runGitMcpServer") {
+    group = "mcp"
+    description = "Run the Git MCP server (JSON-RPC over stdio)"
+    mainClass.set("mcp.server.GitMcpServerKt")
+    val desktopMain = kotlin.targets.getByName("desktop").compilations.getByName("main")
+    classpath = files(desktopMain.runtimeDependencyFiles, desktopMain.output.allOutputs)
+    standardInput = System.`in`
+    standardOutput = System.out
+}
