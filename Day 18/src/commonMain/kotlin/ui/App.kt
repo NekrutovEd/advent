@@ -48,11 +48,35 @@ fun App(appState: AppState) {
         }
     }
 
+    // Poll MCP scheduler notifications every 1 second
+    LaunchedEffect(Unit) {
+        while (true) {
+            delay(1_000)
+            appState.mcpState?.pollNotifications()
+        }
+    }
+
     MaterialTheme(colorScheme = darkColorScheme()) {
         CompositionLocalProvider(LocalStrings provides stringsFor(appState.settings.lang)) {
             val s = LocalStrings.current
+            val snackbarHostState = remember { SnackbarHostState() }
+
+            // Deliver MCP scheduler notifications to target chats
+            val mcpNotifications = appState.mcpState?.notifications
+            LaunchedEffect(mcpNotifications?.size) {
+                val notes = mcpNotifications ?: return@LaunchedEffect
+                while (notes.isNotEmpty()) {
+                    val n = notes.removeAt(0)
+                    if (n.chatId.isNotBlank() && n.sessionId.isNotBlank()) {
+                        val job = appState.deliverScheduledMessage(n.sessionId, n.chatId, n.description, scope)
+                        job?.join()
+                    }
+                }
+            }
+
             Surface(color = MaterialTheme.colorScheme.background) {
-                Column(modifier = Modifier.fillMaxSize().safeDrawingPadding()) {
+                Box(modifier = Modifier.fillMaxSize()) {
+                    Column(modifier = Modifier.fillMaxSize().safeDrawingPadding()) {
                     // Top bar: collapse toggle + session tab bar + settings
                     Row(
                         modifier = Modifier.fillMaxWidth().padding(horizontal = 8.dp, vertical = 4.dp),
@@ -266,6 +290,12 @@ fun App(appState: AppState) {
                             )
                         }
                     }
+                    }
+
+                    SnackbarHost(
+                        hostState = snackbarHostState,
+                        modifier = Modifier.align(Alignment.BottomCenter)
+                    )
                 }
             }
 

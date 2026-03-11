@@ -5,6 +5,7 @@ import org.json.JSONObject
 import java.io.BufferedReader
 import java.io.File
 import java.io.InputStreamReader
+import java.io.PrintStream
 import java.util.concurrent.TimeUnit
 
 /**
@@ -150,14 +151,15 @@ class GitMcpServer {
     )
 
     fun run() {
-        val reader = BufferedReader(InputStreamReader(System.`in`))
+        val utf8Out = PrintStream(System.out, true, "UTF-8")
+        val reader = BufferedReader(InputStreamReader(System.`in`, Charsets.UTF_8))
         while (true) {
             val line = reader.readLine() ?: break
             if (line.isBlank()) continue
             val response = handleMessage(line)
             if (response != null) {
-                println(response)
-                System.out.flush()
+                utf8Out.println(response)
+                utf8Out.flush()
             }
         }
     }
@@ -504,7 +506,7 @@ class GitMcpServer {
         pb.directory(workDir)
         pb.redirectErrorStream(true)
         val process = pb.start()
-        val output = process.inputStream.bufferedReader().readText()
+        val output = process.inputStream.bufferedReader(Charsets.UTF_8).readText()
         val exitCode = process.waitFor(30, TimeUnit.SECONDS)
         val code = if (exitCode) process.exitValue() else -1
 

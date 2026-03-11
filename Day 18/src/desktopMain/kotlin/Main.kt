@@ -30,7 +30,7 @@ fun main() = application {
 
     Window(
         onCloseRequest = { appState.saveToStorage(); exitApplication() },
-        title = "Day 17 — Git MCP Server",
+        title = "Day 18 — Scheduler MCP Server",
         state = windowState
     ) {
         App(appState)

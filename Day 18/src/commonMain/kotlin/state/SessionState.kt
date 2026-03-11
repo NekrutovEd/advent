@@ -144,7 +144,9 @@ class SessionState(
                         }
                     },
                     mcpTools = mcpTools,
-                    toolExecutor = toolExecutor
+                    toolExecutor = toolExecutor,
+                    schedulerChatId = if (mcpTools != null) chat.id else "",
+                    schedulerSessionId = if (mcpTools != null) id else ""
                 )
             }
         }
@@ -160,7 +162,8 @@ class SessionState(
         timestamp: Long = 0L,
         onLongTermExtracted: ((List<String>) -> Unit)? = null,
         mcpTools: List<McpTool>? = null,
-        toolExecutor: (suspend (String, String) -> String)? = null
+        toolExecutor: (suspend (String, String) -> String)? = null,
+        hideUserMessage: Boolean = false
     ): Job? {
         if (prompt.isBlank()) return null
 
@@ -195,7 +198,10 @@ class SessionState(
                     }
                 },
                 mcpTools = mcpTools,
-                toolExecutor = toolExecutor
+                toolExecutor = toolExecutor,
+                schedulerChatId = if (mcpTools != null) chat.id else "",
+                schedulerSessionId = if (mcpTools != null) id else "",
+                hideUserMessage = hideUserMessage
             )
         }
     }

@@ -136,3 +136,14 @@ tasks.register<JavaExec>("runGitMcpServer") {
     standardInput = System.`in`
     standardOutput = System.out
 }
+
+// Task to run the Scheduler MCP server as a standalone process
+tasks.register<JavaExec>("runSchedulerMcpServer") {
+    group = "mcp"
+    description = "Run the Scheduler MCP server (JSON-RPC over stdio)"
+    mainClass.set("mcp.server.SchedulerMcpServerKt")
+    val desktopMain = kotlin.targets.getByName("desktop").compilations.getByName("main")
+    classpath = files(desktopMain.runtimeDependencyFiles, desktopMain.output.allOutputs)
+    standardInput = System.`in`
+    standardOutput = System.out
+}

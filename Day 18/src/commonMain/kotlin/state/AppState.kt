@@ -196,6 +196,27 @@ class AppState(
             toolExecutor = mcpToolExecutor()
         )
 
+    // Scheduled message delivery — sends a prompt into a specific chat as an AI roundtrip
+    // No MCP tools passed — agent just responds to the text, no tool calling
+    fun deliverScheduledMessage(sessionId: String, chatId: String, prompt: String, scope: CoroutineScope): Job? {
+        val session = sessions.firstOrNull { it.id == sessionId } ?: return null
+        val chat = session.chats.firstOrNull { it.id == chatId } ?: return null
+        if (chat.isLoading) return null // avoid concurrent sends
+        return session.sendToOne(
+            chat, prompt, scope,
+            longTermMemoryText = longTermMemoryText(),
+            profileText = activeProfileText(),
+            invariantsText = invariantsText(),
+            timestamp = currentTimeMs(),
+            onLongTermExtracted = { items ->
+                items.forEach { addLongTermMemoryItem(it, MemorySource.AUTO_EXTRACTED, currentTimeMs()) }
+            },
+            mcpTools = null,
+            toolExecutor = null,
+            hideUserMessage = true
+        )
+    }
+
     // Session management
     fun addSession() {
         sessions.add(createNewSession())

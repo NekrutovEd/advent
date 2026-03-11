@@ -40,9 +40,9 @@ class McpClient : McpClientInterface {
 
         val proc = pb.start()
         process = proc
-        errReader = BufferedReader(InputStreamReader(proc.errorStream))
-        reader = BufferedReader(InputStreamReader(proc.inputStream))
-        writer = BufferedWriter(OutputStreamWriter(proc.outputStream))
+        errReader = BufferedReader(InputStreamReader(proc.errorStream, Charsets.UTF_8))
+        reader = BufferedReader(InputStreamReader(proc.inputStream, Charsets.UTF_8))
+        writer = BufferedWriter(OutputStreamWriter(proc.outputStream, Charsets.UTF_8))
 
         // Send initialize request
         val initResult = sendRequest("initialize", buildJsonObject {

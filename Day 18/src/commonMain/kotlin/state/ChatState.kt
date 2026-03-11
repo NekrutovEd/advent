@@ -320,7 +320,10 @@ class ChatState(
         lang: Lang = Lang.EN,
         onMemoryExtracted: (suspend (ExtractedMemoryResult) -> Unit)? = null,
         mcpTools: List<McpTool>? = null,
-        toolExecutor: (suspend (String, String) -> String)? = null
+        toolExecutor: (suspend (String, String) -> String)? = null,
+        schedulerChatId: String = "",
+        schedulerSessionId: String = "",
+        hideUserMessage: Boolean = false
     ) {
         isLoading = true
         error = null
@@ -333,7 +336,7 @@ class ChatState(
 
         // Prepend memory and task state as system messages in snapshot
         val taskContext = if (taskTracking) taskTracker.toContextString(lang) else ""
-        val memoryPreamble = buildMemoryPreamble(profileText, longTermMemoryText, workingMemoryText, taskContext, invariantsText)
+        val memoryPreamble = buildMemoryPreamble(profileText, longTermMemoryText, workingMemoryText, taskContext, invariantsText, schedulerChatId, schedulerSessionId)
         val snapshotWithMemory = memoryPreamble + snapshotHistory
 
         val snapshot = try {
@@ -352,7 +355,7 @@ class ChatState(
         } catch (_: Exception) { null }
 
         val userMessage = ChatMessage("user", userContent, requestSnapshot = snapshot)
-        messages.add(userMessage)
+        if (!hideUserMessage) messages.add(userMessage)
         history.add(userMessage)
 
         try {
@@ -362,7 +365,8 @@ class ChatState(
                 apiKey, model, temperature, maxTokens, systemPrompt,
                 connectTimeoutSec, readTimeoutSec, stop, responseFormat, jsonSchema,
                 baseUrl, profileText, longTermMemoryText, workingMemoryText,
-                taskContext, invariantsText, effectiveTools
+                taskContext, invariantsText, effectiveTools,
+                schedulerChatId, schedulerSessionId
             )
             accumulateUsage(response)
 
@@ -429,7 +433,7 @@ class ChatState(
         } catch (e: Exception) {
             error = e.message ?: "Unknown error"
             if (history.isNotEmpty()) history.removeLast()
-            messages.removeLastOrNull()
+            if (!hideUserMessage) messages.removeLastOrNull()
         } finally {
             isLoading = false
         }
@@ -441,11 +445,16 @@ class ChatState(
         stop: List<String>?, responseFormat: String?, jsonSchema: String?,
         baseUrl: String?, profileText: String, longTermMemoryText: String,
         workingMemoryText: String, taskContext: String, invariantsText: String,
-        tools: List<McpTool>?
+        tools: List<McpTool>?,
+        schedulerChatId: String = "", schedulerSessionId: String = ""
     ): ChatResponse {
         val fullHistory = if (sendHistory) history.toList() else listOf(history.last())
         val windowedHistory = if (sendHistory) applySlidingWindow(fullHistory) else fullHistory
-        val apiHistory = buildMemoryPreamble(profileText, longTermMemoryText, workingMemoryText, taskContext, invariantsText) + windowedHistory
+        // When no tools are provided, strip tool-related messages to avoid API errors
+        val cleanHistory = if (tools == null) {
+            windowedHistory.filter { it.role != "tool" && it.toolCalls == null }
+        } else windowedHistory
+        val apiHistory = buildMemoryPreamble(profileText, longTermMemoryText, workingMemoryText, taskContext, invariantsText, schedulerChatId, schedulerSessionId) + cleanHistory
 
         return chatApi.sendMessage(
             history = apiHistory,
@@ -559,7 +568,7 @@ class ChatState(
         }
     }
 
-    private fun buildMemoryPreamble(profileText: String, longTermMemoryText: String, workingMemoryText: String, taskContext: String = "", invariantsText: String = ""): List<ChatMessage> {
+    private fun buildMemoryPreamble(profileText: String, longTermMemoryText: String, workingMemoryText: String, taskContext: String = "", invariantsText: String = "", schedulerChatId: String = "", schedulerSessionId: String = ""): List<ChatMessage> {
         return buildList {
             if (profileText.isNotBlank()) {
                 add(ChatMessage("system", "[Active Profile]\n$profileText"))
@@ -575,6 +584,9 @@ class ChatState(
             }
             if (taskContext.isNotBlank()) {
                 add(ChatMessage("system", taskContext))
+            }
+            if (schedulerChatId.isNotBlank() && schedulerSessionId.isNotBlank()) {
+                add(ChatMessage("system", "[Scheduler Context]\nchat_id: $schedulerChatId\nsession_id: $schedulerSessionId\nWhen using schedule_once or schedule_recurring tools:\n1. Pass these IDs as chat_id and session_id so results are delivered back to this chat.\n2. CRITICAL: The action_prompt field must contain a DIRECT instruction for what to do when the task fires — e.g. \"Расскажи анекдот\" or \"Tell a joke\". Do NOT put the original user request (like \"расскажи анекдот через минуту\") — strip away ALL time/scheduling references and write ONLY the action. The AI receiving this prompt will execute it immediately without scheduling."))
             }
         }
     }
