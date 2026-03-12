@@ -147,3 +147,14 @@ tasks.register<JavaExec>("runSchedulerMcpServer") {
     standardInput = System.`in`
     standardOutput = System.out
 }
+
+// Task to run the Pipeline MCP server as a standalone process
+tasks.register<JavaExec>("runPipelineMcpServer") {
+    group = "mcp"
+    description = "Run the Pipeline MCP server (JSON-RPC over stdio)"
+    mainClass.set("mcp.server.PipelineMcpServerKt")
+    val desktopMain = kotlin.targets.getByName("desktop").compilations.getByName("main")
+    classpath = files(desktopMain.runtimeDependencyFiles, desktopMain.output.allOutputs)
+    standardInput = System.`in`
+    standardOutput = System.out
+}
