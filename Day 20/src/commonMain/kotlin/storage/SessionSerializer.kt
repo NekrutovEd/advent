@@ -38,13 +38,16 @@ object SessionSerializer {
                 )
             }
         )
-        val mcpDto = appState.mcpState?.let { mcp ->
-            McpConfigDto(
-                serverCommand = mcp.serverCommand,
-                serverArgs = mcp.serverArgs,
-                autoConnect = mcp.isConnected
+        val mcpDto = McpConfigDto() // legacy, kept for backward compat
+        val mcpServersDto = appState.orchestrator?.servers?.map { entry ->
+            McpServerConfigDto(
+                id = entry.id,
+                label = entry.label,
+                serverCommand = entry.serverCommand,
+                serverArgs = entry.serverArgs,
+                autoConnect = entry.isConnected
             )
-        } ?: McpConfigDto()
+        } ?: emptyList()
 
         val dto = AppStateDto(
             activeSessionIndex = appState.activeSessionIndex,
@@ -55,7 +58,8 @@ object SessionSerializer {
             activeProfileId = appState.activeProfileId,
             invariants = appState.invariants.map { InvariantItemDto(it.id, it.content, it.timestamp) },
             settings = settingsDto,
-            mcpConfig = mcpDto
+            mcpConfig = mcpDto,
+            mcpServers = mcpServersDto
         )
         return json.encodeToString(dto)
     }

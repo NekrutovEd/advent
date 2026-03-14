@@ -129,7 +129,7 @@ object EnStrings : Strings {
     override fun sessionDefaultName(n: Int) = "New"
 
     // MCP
-    override val mcpSectionTitle = "MCP Server"
+    override val mcpSectionTitle = "MCP Servers (Orchestration)"
     override val mcpServerCommand = "Command (e.g. npx)"
     override val mcpServerArgs = "Arguments"
     override val mcpConnect = "Connect"
@@ -141,6 +141,13 @@ object EnStrings : Strings {
     override val mcpNoTools = "No tools available"
     override fun mcpToolCount(n: Int) = "$n tools"
     override fun mcpServerInfo(name: String) = "Server: $name"
+    override val mcpAddServer = "+ Add Server"
+    override val mcpRemoveServer = "Remove"
+    override val mcpConnectAll = "Connect All"
+    override val mcpDisconnectAll = "Disconnect All"
+    override val mcpServerLabel = "Label"
+    override val mcpServerLabelPlaceholder = "e.g. Git, Pipeline..."
+    override fun mcpOrchestratorStatus(servers: Int, tools: Int) = "MCP: $servers servers, $tools tools"
 
     // Parameterized
     override fun stopWordPlaceholder(index: Int) = "Stop ${index + 1}"

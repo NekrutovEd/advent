@@ -129,7 +129,7 @@ object RuStrings : Strings {
     override fun sessionDefaultName(n: Int) = "New"
 
     // MCP
-    override val mcpSectionTitle = "MCP-сервер"
+    override val mcpSectionTitle = "MCP-серверы (Оркестрация)"
     override val mcpServerCommand = "Команда (напр. npx)"
     override val mcpServerArgs = "Аргументы"
     override val mcpConnect = "Подключить"
@@ -141,6 +141,13 @@ object RuStrings : Strings {
     override val mcpNoTools = "Нет инструментов"
     override fun mcpToolCount(n: Int) = "$n инструментов"
     override fun mcpServerInfo(name: String) = "Сервер: $name"
+    override val mcpAddServer = "+ Добавить сервер"
+    override val mcpRemoveServer = "Удалить"
+    override val mcpConnectAll = "Подключить все"
+    override val mcpDisconnectAll = "Отключить все"
+    override val mcpServerLabel = "Метка"
+    override val mcpServerLabelPlaceholder = "напр. Git, Pipeline..."
+    override fun mcpOrchestratorStatus(servers: Int, tools: Int) = "MCP: $servers серверов, $tools инструментов"
 
     // Parameterized
     override fun stopWordPlaceholder(index: Int) = "Стоп ${index + 1}"

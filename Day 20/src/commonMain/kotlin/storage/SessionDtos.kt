@@ -110,6 +110,15 @@ data class McpConfigDto(
 )
 
 @Serializable
+data class McpServerConfigDto(
+    val id: String = "",
+    val label: String = "",
+    val serverCommand: String = "",
+    val serverArgs: String = "",
+    val autoConnect: Boolean = false
+)
+
+@Serializable
 data class AppStateDto(
     val activeSessionIndex: Int,
     val sessions: List<SessionDto>,
@@ -119,5 +128,6 @@ data class AppStateDto(
     val activeProfileId: String? = null,
     val invariants: List<InvariantItemDto> = emptyList(),
     val settings: SettingsDto = SettingsDto(),
-    val mcpConfig: McpConfigDto = McpConfigDto()
+    val mcpConfig: McpConfigDto = McpConfigDto(),
+    val mcpServers: List<McpServerConfigDto> = emptyList()
 )

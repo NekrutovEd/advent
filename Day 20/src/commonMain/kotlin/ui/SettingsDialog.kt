@@ -3,8 +3,10 @@ package ui
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.expandVertically
 import androidx.compose.animation.shrinkVertically
+import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
@@ -16,7 +18,8 @@ import i18n.Lang
 import i18n.LocalStrings
 import kotlinx.coroutines.launch
 import state.ApiConfig
-import state.McpState
+import state.McpOrchestrator
+import state.McpServerEntry
 import state.SettingsState
 
 private class ContextDraft(settings: SettingsState) {
@@ -40,7 +43,7 @@ private class ApiConfigDraft(config: ApiConfig) {
 @Composable
 fun SettingsDialog(
     settings: SettingsState,
-    mcpState: McpState? = null,
+    orchestrator: McpOrchestrator? = null,
     onDismiss: () -> Unit
 ) {
     val s = LocalStrings.current
@@ -60,8 +63,8 @@ fun SettingsDialog(
             Column(
                 verticalArrangement = Arrangement.spacedBy(12.dp),
                 modifier = Modifier
-                    .width(350.dp)
-                    .heightIn(max = 500.dp)
+                    .width(400.dp)
+                    .heightIn(max = 550.dp)
                     .verticalScroll(rememberScrollState())
             ) {
                 // Language selector — applied immediately
@@ -251,10 +254,10 @@ fun SettingsDialog(
                     }
                 }
 
-                // MCP section
-                if (mcpState != null) {
+                // MCP Orchestration section
+                if (orchestrator != null) {
                     HorizontalDivider()
-                    McpSection(mcpState, s, scope)
+                    McpOrchestrationSection(orchestrator, s, scope)
                 }
             }
         },
@@ -289,101 +292,226 @@ fun SettingsDialog(
 }
 
 @Composable
-private fun McpSection(
-    mcpState: McpState,
+private fun McpOrchestrationSection(
+    orchestrator: McpOrchestrator,
     s: i18n.Strings,
     scope: kotlinx.coroutines.CoroutineScope
 ) {
     Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
         Text(s.mcpSectionTitle, style = MaterialTheme.typography.titleSmall)
 
-        OutlinedTextField(
-            value = mcpState.serverCommand,
-            onValueChange = { mcpState.serverCommand = it },
-            label = { Text(s.mcpServerCommand) },
-            singleLine = true,
-            enabled = !mcpState.isConnected && !mcpState.isConnecting,
-            modifier = Modifier.fillMaxWidth()
-        )
-
-        OutlinedTextField(
-            value = mcpState.serverArgs,
-            onValueChange = { mcpState.serverArgs = it },
-            label = { Text(s.mcpServerArgs) },
-            singleLine = true,
-            enabled = !mcpState.isConnected && !mcpState.isConnecting,
-            modifier = Modifier.fillMaxWidth()
-        )
-
-        Row(
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(8.dp)
-        ) {
-            if (!mcpState.isConnected) {
-                Button(
-                    onClick = { scope.launch { mcpState.connect() } },
-                    enabled = !mcpState.isConnecting && mcpState.serverCommand.isNotBlank()
-                ) {
-                    Text(if (mcpState.isConnecting) s.mcpConnecting else s.mcpConnect)
-                }
-            } else {
-                Button(onClick = { mcpState.disconnect() }) {
-                    Text(s.mcpDisconnect)
-                }
-            }
-
-            // Status indicator
-            val statusColor = when {
-                mcpState.isConnected -> MaterialTheme.colorScheme.primary
-                mcpState.error != null -> MaterialTheme.colorScheme.error
-                else -> MaterialTheme.colorScheme.onSurfaceVariant
-            }
-            val statusText = when {
-                mcpState.isConnecting -> s.mcpConnecting
-                mcpState.isConnected -> s.mcpConnected
-                else -> s.mcpDisconnected
-            }
-            Text(statusText, color = statusColor, style = MaterialTheme.typography.bodySmall)
-        }
-
-        // Server info
-        if (mcpState.serverName.isNotBlank()) {
+        // Orchestrator status
+        if (orchestrator.connectedCount > 0) {
             Text(
-                s.mcpServerInfo(mcpState.serverName),
+                s.mcpOrchestratorStatus(orchestrator.connectedCount, orchestrator.allTools.size),
                 style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant
+                color = MaterialTheme.colorScheme.primary
             )
         }
 
-        // Error
-        if (mcpState.error != null) {
-            Text(
-                mcpState.error!!,
-                color = MaterialTheme.colorScheme.error,
-                style = MaterialTheme.typography.bodySmall
-            )
+        // Global actions
+        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            OutlinedButton(
+                onClick = { scope.launch { orchestrator.connectAll() } },
+                enabled = orchestrator.servers.any { !it.isConnected && it.serverCommand.isNotBlank() },
+                contentPadding = PaddingValues(horizontal = 12.dp, vertical = 4.dp)
+            ) {
+                Text(s.mcpConnectAll, style = MaterialTheme.typography.bodySmall)
+            }
+            OutlinedButton(
+                onClick = { orchestrator.disconnectAll() },
+                enabled = orchestrator.connectedCount > 0,
+                contentPadding = PaddingValues(horizontal = 12.dp, vertical = 4.dp)
+            ) {
+                Text(s.mcpDisconnectAll, style = MaterialTheme.typography.bodySmall)
+            }
         }
 
-        // Tools list
-        if (mcpState.tools.isNotEmpty()) {
-            Text(
-                "${s.mcpToolsTitle} (${s.mcpToolCount(mcpState.tools.size)})",
-                style = MaterialTheme.typography.labelMedium
-            )
-            mcpState.tools.forEach { tool ->
-                Column(modifier = Modifier.padding(start = 8.dp)) {
-                    Text(tool.name, style = MaterialTheme.typography.bodyMedium)
-                    if (tool.description.isNotBlank()) {
+        // Server entries
+        orchestrator.servers.forEachIndexed { index, entry ->
+            McpServerCard(entry, s, scope, onRemove = { orchestrator.removeServer(entry.id) })
+            if (index < orchestrator.servers.size - 1) {
+                Spacer(modifier = Modifier.height(4.dp))
+            }
+        }
+
+        // Add server button
+        OutlinedButton(
+            onClick = { orchestrator.addServer() },
+            modifier = Modifier.fillMaxWidth()
+        ) {
+            Text(s.mcpAddServer)
+        }
+    }
+}
+
+@Composable
+private fun McpServerCard(
+    entry: McpServerEntry,
+    s: i18n.Strings,
+    scope: kotlinx.coroutines.CoroutineScope,
+    onRemove: () -> Unit
+) {
+    var expanded by remember { mutableStateOf(!entry.isConnected) }
+
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .border(1.dp, MaterialTheme.colorScheme.outlineVariant, RoundedCornerShape(8.dp))
+            .padding(8.dp),
+        verticalArrangement = Arrangement.spacedBy(6.dp)
+    ) {
+        // Header row: label + status + expand toggle
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                // Status dot
+                val dotColor = when {
+                    entry.isConnected -> MaterialTheme.colorScheme.primary
+                    entry.error != null -> MaterialTheme.colorScheme.error
+                    else -> MaterialTheme.colorScheme.onSurfaceVariant
+                }
+                Surface(
+                    color = dotColor,
+                    shape = RoundedCornerShape(50),
+                    modifier = Modifier.size(8.dp)
+                ) {}
+
+                Text(
+                    entry.label.ifBlank { entry.serverCommand.ifBlank { "New Server" } },
+                    style = MaterialTheme.typography.bodyMedium
+                )
+
+                if (entry.isConnected && entry.tools.isNotEmpty()) {
+                    Text(
+                        "(${entry.tools.size})",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
+            }
+
+            TextButton(onClick = { expanded = !expanded }) {
+                Text(if (expanded) "\u25B2" else "\u25BC", style = MaterialTheme.typography.bodySmall)
+            }
+        }
+
+        AnimatedVisibility(
+            visible = expanded,
+            enter = expandVertically(),
+            exit = shrinkVertically()
+        ) {
+            Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                OutlinedTextField(
+                    value = entry.label,
+                    onValueChange = { entry.label = it },
+                    label = { Text(s.mcpServerLabel) },
+                    placeholder = { Text(s.mcpServerLabelPlaceholder) },
+                    singleLine = true,
+                    enabled = !entry.isConnected,
+                    modifier = Modifier.fillMaxWidth()
+                )
+
+                OutlinedTextField(
+                    value = entry.serverCommand,
+                    onValueChange = { entry.serverCommand = it },
+                    label = { Text(s.mcpServerCommand) },
+                    singleLine = true,
+                    enabled = !entry.isConnected && !entry.isConnecting,
+                    modifier = Modifier.fillMaxWidth()
+                )
+
+                OutlinedTextField(
+                    value = entry.serverArgs,
+                    onValueChange = { entry.serverArgs = it },
+                    label = { Text(s.mcpServerArgs) },
+                    singleLine = true,
+                    enabled = !entry.isConnected && !entry.isConnecting,
+                    modifier = Modifier.fillMaxWidth()
+                )
+
+                // Connect/Disconnect + Remove
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    if (!entry.isConnected) {
+                        Button(
+                            onClick = { scope.launch { entry.connect() } },
+                            enabled = !entry.isConnecting && entry.serverCommand.isNotBlank(),
+                            contentPadding = PaddingValues(horizontal = 12.dp, vertical = 4.dp)
+                        ) {
+                            Text(if (entry.isConnecting) s.mcpConnecting else s.mcpConnect)
+                        }
+                    } else {
+                        Button(
+                            onClick = { entry.disconnect() },
+                            contentPadding = PaddingValues(horizontal = 12.dp, vertical = 4.dp)
+                        ) {
+                            Text(s.mcpDisconnect)
+                        }
+                    }
+
+                    TextButton(
+                        onClick = onRemove,
+                        enabled = !entry.isConnecting,
+                        contentPadding = PaddingValues(horizontal = 8.dp, vertical = 4.dp)
+                    ) {
                         Text(
-                            tool.description,
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                            s.mcpRemoveServer,
+                            color = MaterialTheme.colorScheme.error,
+                            style = MaterialTheme.typography.bodySmall
                         )
                     }
                 }
+
+                // Server info
+                if (entry.serverName.isNotBlank()) {
+                    Text(
+                        s.mcpServerInfo(entry.serverName),
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
+
+                // Error
+                if (entry.error != null) {
+                    Text(
+                        entry.error!!,
+                        color = MaterialTheme.colorScheme.error,
+                        style = MaterialTheme.typography.bodySmall
+                    )
+                }
+
+                // Tools list
+                if (entry.tools.isNotEmpty()) {
+                    Text(
+                        "${s.mcpToolsTitle} (${s.mcpToolCount(entry.tools.size)})",
+                        style = MaterialTheme.typography.labelMedium
+                    )
+                    entry.tools.forEach { tool ->
+                        Column(modifier = Modifier.padding(start = 8.dp)) {
+                            Text(tool.name, style = MaterialTheme.typography.bodySmall)
+                            if (tool.description.isNotBlank()) {
+                                Text(
+                                    tool.description,
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                    maxLines = 1
+                                )
+                            }
+                        }
+                    }
+                } else if (entry.isConnected) {
+                    Text(s.mcpNoTools, style = MaterialTheme.typography.bodySmall)
+                }
             }
-        } else if (mcpState.isConnected) {
-            Text(s.mcpNoTools, style = MaterialTheme.typography.bodySmall)
         }
     }
 }

@@ -12,17 +12,16 @@ import kotlinx.coroutines.launch
 import mcp.McpClientInterface
 import kotlin.random.Random
 import storage.ArchivedSessionDto
-import storage.NoOpStorage
 import storage.SessionSerializer
 import storage.StorageManager
+import storage.NoOpStorage
 
 class AppState(
     internal val chatApi: ChatApiInterface,
     private val storage: StorageManager = NoOpStorage,
-    mcpClient: McpClientInterface? = null
+    mcpClientFactory: (() -> McpClientInterface)? = null
 ) {
-    internal val mcpClientRef: McpClientInterface? = mcpClient
-    val mcpState: McpState? = mcpClient?.let { McpState(it) }
+    val orchestrator: McpOrchestrator? = mcpClientFactory?.let { McpOrchestrator(it) }
     val settings = SettingsState()
     val sessions = mutableStateListOf<SessionState>()
     val archivedSessions = mutableStateListOf<ArchivedSessionDto>()
@@ -45,6 +44,8 @@ class AppState(
     val isBusy: Boolean get() = activeSession.isBusy
 
     fun currentTimeMs(): Long = storage.currentTimeMs()
+
+    // Backward compat: removed. Use orchestrator directly.
 
     fun addLongTermMemoryItem(content: String, source: MemorySource, timestamp: Long): MemoryItem {
         val item = MemoryItem(id = buildMemoryId(), content = content, source = source, timestamp = timestamp)
@@ -154,15 +155,15 @@ class AppState(
         addLongTermMemoryItem(item.content, MemorySource.PROMOTED, timestamp)
     }
 
-    // MCP helpers
+    // MCP helpers — now using orchestrator
     private fun mcpToolsOrNull(): List<mcp.McpTool>? =
-        mcpState?.tools?.toList()?.takeIf { it.isNotEmpty() }
+        orchestrator?.allTools?.takeIf { it.isNotEmpty() }
 
     private fun mcpToolExecutor(): (suspend (String, String) -> String)? {
-        val client = mcpClientRef ?: return null
-        if (mcpState?.isConnected != true) return null
+        val orch = orchestrator ?: return null
+        if (orch.connectedCount == 0) return null
         val executor: suspend (String, String) -> String = { name, args ->
-            client.callTool(name, args).content
+            orch.callTool(name, args).content
         }
         return executor
     }
@@ -332,17 +333,30 @@ class AppState(
             }
         }
 
-        // Restore MCP config and auto-connect
-        val mcp = dto.mcpConfig
-        mcpState?.let { state ->
-            state.serverCommand = mcp.serverCommand
-            state.serverArgs = mcp.serverArgs
+        // Restore MCP servers config
+        orchestrator?.let { orch ->
+            // Support both old single-server config and new multi-server
+            if (dto.mcpServers.isNotEmpty()) {
+                dto.mcpServers.forEach { serverDto ->
+                    val entry = orch.addServer(serverDto.label, serverDto.serverCommand, serverDto.serverArgs)
+                    if (serverDto.autoConnect && serverDto.serverCommand.isNotBlank()) {
+                        pendingMcpAutoConnectIds.add(entry.id)
+                    }
+                }
+            } else if (dto.mcpConfig.serverCommand.isNotBlank()) {
+                // Migrate old single-server config
+                val entry = orch.addServer("Server", dto.mcpConfig.serverCommand, dto.mcpConfig.serverArgs)
+                if (dto.mcpConfig.autoConnect) {
+                    pendingMcpAutoConnectIds.add(entry.id)
+                }
+            }
         }
-        pendingMcpAutoConnect = mcp.autoConnect && mcp.serverCommand.isNotBlank()
+        pendingMcpAutoConnect = pendingMcpAutoConnectIds.isNotEmpty()
     }
 
     /** Set by loadFromStorage, consumed by UI to trigger auto-connect once. */
     var pendingMcpAutoConnect by mutableStateOf(false)
+    val pendingMcpAutoConnectIds = mutableListOf<String>()
 
     /** Auto-renames a "New" session using the cheapest available model. */
     fun autoRenameSession(sessionIndex: Int, firstPrompt: String, scope: CoroutineScope) {

@@ -18,7 +18,7 @@ fun main() = application {
         AppState(
             ChatApi(),
             FileStorageManager(storageDir),
-            McpClient()
+            mcpClientFactory = { McpClient() }
         ).also {
             it.settings.apiConfigs.forEach { config ->
                 val envName = "${config.id.uppercase()}_API_KEY"
@@ -30,7 +30,7 @@ fun main() = application {
 
     Window(
         onCloseRequest = { appState.saveToStorage(); exitApplication() },
-        title = "Day 19 — Pipeline MCP Tool Composition",
+        title = "Day 20 — Orchestration MCP: Multi-Server Tool Routing",
         state = windowState
     ) {
         App(appState)

@@ -140,6 +140,13 @@ interface Strings {
     val mcpNoTools: String
     fun mcpToolCount(n: Int): String
     fun mcpServerInfo(name: String): String
+    val mcpAddServer: String
+    val mcpRemoveServer: String
+    val mcpConnectAll: String
+    val mcpDisconnectAll: String
+    val mcpServerLabel: String
+    val mcpServerLabelPlaceholder: String
+    fun mcpOrchestratorStatus(servers: Int, tools: Int): String
 
     // Parameterized
     fun stopWordPlaceholder(index: Int): String

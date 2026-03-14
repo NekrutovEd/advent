@@ -33,10 +33,16 @@ fun App(appState: AppState) {
     // Load persisted state on first composition
     LaunchedEffect(Unit) {
         appState.loadFromStorage()
-        // Auto-connect MCP if it was connected last time
+        // Auto-connect MCP servers that were connected last time
         if (appState.pendingMcpAutoConnect) {
             appState.pendingMcpAutoConnect = false
-            appState.mcpState?.connect()
+            val orch = appState.orchestrator ?: return@LaunchedEffect
+            val ids = appState.pendingMcpAutoConnectIds.toList()
+            appState.pendingMcpAutoConnectIds.clear()
+            ids.forEach { id ->
+                val entry = orch.servers.firstOrNull { it.id == id }
+                entry?.connect()
+            }
         }
     }
 
@@ -48,11 +54,11 @@ fun App(appState: AppState) {
         }
     }
 
-    // Poll MCP scheduler notifications every 1 second
+    // Poll MCP scheduler notifications from all servers every 1 second
     LaunchedEffect(Unit) {
         while (true) {
             delay(1_000)
-            appState.mcpState?.pollNotifications()
+            appState.orchestrator?.pollAllNotifications()
         }
     }
 
@@ -61,12 +67,12 @@ fun App(appState: AppState) {
             val s = LocalStrings.current
             val snackbarHostState = remember { SnackbarHostState() }
 
-            // Deliver MCP scheduler notifications to target chats
-            val mcpNotifications = appState.mcpState?.notifications
-            LaunchedEffect(mcpNotifications?.size) {
-                val notes = mcpNotifications ?: return@LaunchedEffect
-                while (notes.isNotEmpty()) {
-                    val n = notes.removeAt(0)
+            // Deliver MCP scheduler notifications from all servers
+            val notificationCount = appState.orchestrator?.servers?.sumOf { it.notifications.size } ?: 0
+            LaunchedEffect(notificationCount) {
+                val orch = appState.orchestrator ?: return@LaunchedEffect
+                val drained = orch.drainNotifications()
+                for (n in drained) {
                     if (n.chatId.isNotBlank() && n.sessionId.isNotBlank()) {
                         val job = appState.deliverScheduledMessage(n.sessionId, n.chatId, n.description, scope)
                         job?.join()
@@ -77,7 +83,7 @@ fun App(appState: AppState) {
             Surface(color = MaterialTheme.colorScheme.background) {
                 Box(modifier = Modifier.fillMaxSize()) {
                     Column(modifier = Modifier.fillMaxSize().safeDrawingPadding()) {
-                    // Top bar: collapse toggle + session tab bar + settings
+                    // Top bar: collapse toggle + session tab bar + MCP status + settings
                     Row(
                         modifier = Modifier.fillMaxWidth().padding(horizontal = 8.dp, vertical = 4.dp),
                         verticalAlignment = Alignment.CenterVertically
@@ -100,6 +106,24 @@ fun App(appState: AppState) {
                             onClearArchive = { appState.clearArchive() },
                             modifier = Modifier.weight(1f)
                         )
+
+                        // MCP orchestrator status badge
+                        val orch = appState.orchestrator
+                        if (orch != null && orch.connectedCount > 0) {
+                            Surface(
+                                color = MaterialTheme.colorScheme.primaryContainer,
+                                shape = MaterialTheme.shapes.small,
+                                modifier = Modifier.padding(horizontal = 4.dp)
+                            ) {
+                                Text(
+                                    s.mcpOrchestratorStatus(orch.connectedCount, orch.allTools.size),
+                                    style = MaterialTheme.typography.labelSmall,
+                                    color = MaterialTheme.colorScheme.onPrimaryContainer,
+                                    modifier = Modifier.padding(horizontal = 8.dp, vertical = 2.dp)
+                                )
+                            }
+                        }
+
                         TextButton(onClick = { appState.showMemoryPanel = !appState.showMemoryPanel }) {
                             Text(s.memoryPanelTitle)
                         }
@@ -302,7 +326,7 @@ fun App(appState: AppState) {
             if (appState.showSettings) {
                 SettingsDialog(
                     settings = appState.settings,
-                    mcpState = appState.mcpState,
+                    orchestrator = appState.orchestrator,
                     onDismiss = { appState.showSettings = false }
                 )
             }
