@@ -336,7 +336,8 @@ class ChatState(
 
         // Prepend memory and task state as system messages in snapshot
         val taskContext = if (taskTracking) taskTracker.toContextString(lang) else ""
-        val memoryPreamble = buildMemoryPreamble(profileText, longTermMemoryText, workingMemoryText, taskContext, invariantsText, schedulerChatId, schedulerSessionId)
+        val hasTools = mcpTools?.isNotEmpty() == true
+        val memoryPreamble = buildMemoryPreamble(profileText, longTermMemoryText, workingMemoryText, taskContext, invariantsText, schedulerChatId, schedulerSessionId, hasTools)
         val snapshotWithMemory = memoryPreamble + snapshotHistory
 
         val snapshot = try {
@@ -454,7 +455,7 @@ class ChatState(
         val cleanHistory = if (tools == null) {
             windowedHistory.filter { it.role != "tool" && it.toolCalls == null }
         } else windowedHistory
-        val apiHistory = buildMemoryPreamble(profileText, longTermMemoryText, workingMemoryText, taskContext, invariantsText, schedulerChatId, schedulerSessionId) + cleanHistory
+        val apiHistory = buildMemoryPreamble(profileText, longTermMemoryText, workingMemoryText, taskContext, invariantsText, schedulerChatId, schedulerSessionId, hasTools = tools != null) + cleanHistory
 
         return chatApi.sendMessage(
             history = apiHistory,
@@ -568,8 +569,23 @@ class ChatState(
         }
     }
 
-    private fun buildMemoryPreamble(profileText: String, longTermMemoryText: String, workingMemoryText: String, taskContext: String = "", invariantsText: String = "", schedulerChatId: String = "", schedulerSessionId: String = ""): List<ChatMessage> {
+    private fun buildMemoryPreamble(
+        profileText: String, longTermMemoryText: String, workingMemoryText: String,
+        taskContext: String = "", invariantsText: String = "",
+        schedulerChatId: String = "", schedulerSessionId: String = "",
+        hasTools: Boolean = false
+    ): List<ChatMessage> {
         return buildList {
+            if (hasTools) {
+                add(ChatMessage("system", buildString {
+                    appendLine("[MCP Tools — IMPORTANT]")
+                    appendLine("You have access to tools via function calling. You MUST use them by making actual tool_call requests.")
+                    appendLine("DO NOT describe tool calls as text or pseudocode. DO NOT write 'functions.name(...)' or similar.")
+                    appendLine("Instead, invoke tools directly through the tool_call mechanism provided by the API.")
+                    appendLine("When a task requires multiple tools, call them step by step — execute one tool, wait for its result, then call the next.")
+                    appendLine("Always use the tool's actual parameter names from its schema.")
+                }))
+            }
             if (profileText.isNotBlank()) {
                 add(ChatMessage("system", "[Active Profile]\n$profileText"))
             }
