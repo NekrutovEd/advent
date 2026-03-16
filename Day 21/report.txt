@@ -1,0 +1,14 @@
+Found 13 matches for 'TODO' (66 files scanned):
+
+3 files, 13 matches total:
+
+  src\desktopTest\kotlin\mcp\McpOrchestratorTest.kt (8 matches):
+    :203  pipeClient.callToolResults["search"] = McpToolResult("src/main.kt:10: TODO: fix this\nsrc/app.kt:20: TODO: refactor")
+    :204  pipeClient.callToolResults["summarize"] = McpToolResult("2 TODO items found in source files")
+    :214  schedClient.callToolResults["schedule_recurring"] = McpToolResult("Task scheduled: daily-todo-check")
+    ... and 5 more unique lines
+
+  src\desktopMain\kotlin\mcp\server\PipelineMcpServer.kt (3 matches):
+    :239  uniqueContents.count { it.contains(focusKeyword) }.toDouble() / uniqueContents.size.coerceAtLeast(1)
+    :333  val avgFreq = words.sumOf { wordFreq[it] ?: 0 }.toDouble() / words.size
+    ... and 1 more unique lines
