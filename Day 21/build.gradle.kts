@@ -158,3 +158,27 @@ tasks.register<JavaExec>("runPipelineMcpServer") {
     standardInput = System.`in`
     standardOutput = System.out
 }
+
+// Task to run the document indexing pipeline (standalone)
+tasks.register<JavaExec>("runIndexing") {
+    group = "mcp"
+    description = "Run the document indexing pipeline — chunk, embed, save index"
+    mainClass.set("indexing.IndexingRunnerKt")
+    val desktopMain = kotlin.targets.getByName("desktop").compilations.getByName("main")
+    classpath = files(desktopMain.runtimeDependencyFiles, desktopMain.output.allOutputs)
+    // Forward system properties: -PapiKey=... -PbaseUrl=... -Pmodel=... -PcorpusDir=...
+    listOf("apiKey", "baseUrl", "embModel", "corpusDir").forEach { prop ->
+        if (project.hasProperty(prop)) systemProperty(prop, project.property(prop)!!)
+    }
+}
+
+// Task to run the Indexing MCP server as a standalone process
+tasks.register<JavaExec>("runIndexingMcpServer") {
+    group = "mcp"
+    description = "Run the Document Indexing MCP server (JSON-RPC over stdio)"
+    mainClass.set("mcp.server.IndexingMcpServerKt")
+    val desktopMain = kotlin.targets.getByName("desktop").compilations.getByName("main")
+    classpath = files(desktopMain.runtimeDependencyFiles, desktopMain.output.allOutputs)
+    standardInput = System.`in`
+    standardOutput = System.out
+}
