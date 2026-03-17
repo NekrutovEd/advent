@@ -480,13 +480,15 @@ private fun McpServerCard(
                     )
                 }
 
-                // Error
+                // Error (selectable so user can copy)
                 if (entry.error != null) {
-                    Text(
-                        entry.error!!,
-                        color = MaterialTheme.colorScheme.error,
-                        style = MaterialTheme.typography.bodySmall
-                    )
+                    androidx.compose.foundation.text.selection.SelectionContainer {
+                        Text(
+                            entry.error!!,
+                            color = MaterialTheme.colorScheme.error,
+                            style = MaterialTheme.typography.bodySmall
+                        )
+                    }
                 }
 
                 // Tools list

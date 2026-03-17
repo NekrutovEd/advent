@@ -1,4 +1,4 @@
 @echo off
-echo Starting Document Indexing MCP Server...
+chcp 65001 >nul
 cd /d "%~dp0"
-call gradlew.bat runIndexingMcpServer
+gradlew.bat runIndexingMcpServer --console=plain -q

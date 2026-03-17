@@ -30,6 +30,14 @@ class IndexingMcpServer {
     private var lastLoadedDocs = emptyList<LoadedDocument>()
     private var embeddingClient: EmbeddingClient? = null
 
+    /** Resolve API key: explicit argument > OPENAI_API_KEY env var */
+    private fun resolveApiKey(args: JSONObject): String {
+        val explicit = args.optString("api_key", "").takeIf { it.isNotBlank() }
+        return explicit
+            ?: System.getenv("OPENAI_API_KEY")?.takeIf { it.isNotBlank() }
+            ?: throw RuntimeException("API key not provided. Set OPENAI_API_KEY environment variable or pass api_key argument.")
+    }
+
     // Supported file extensions for document loading
     private val TEXT_EXTENSIONS = setOf("md", "txt", "kt", "java", "py", "js", "ts", "json", "xml", "html", "css", "yml", "yaml", "toml", "properties", "gradle", "bat", "sh")
 
@@ -43,9 +51,9 @@ class IndexingMcpServer {
         ),
         toolDef(
             "index_documents", "Index loaded documents: chunk them, generate embeddings, and store the index. " +
-                "Requires load_documents to be called first and an API key for embeddings.",
-            prop("strategy", "string", "Chunking strategy: 'fixed', 'structural', or 'both' (default: both)"),
-            prop("api_key", "string", "API key for the embeddings provider"),
+                "Requires load_documents to be called first. Uses OPENAI_API_KEY env var by default.",
+            prop("strategy", "string", "Chunking strategy: 'fixed', 'structural', or 'both' (default: both)", required = false),
+            prop("api_key", "string", "API key for embeddings (default: OPENAI_API_KEY env var)", required = false),
             prop("base_url", "string", "Base URL for the embeddings API (default: https://api.openai.com)", required = false),
             prop("model", "string", "Embedding model name (default: text-embedding-3-small)", required = false),
             prop("chunk_size", "integer", "Chunk size in characters for fixed strategy (default: 500)", required = false),
@@ -53,12 +61,12 @@ class IndexingMcpServer {
             prop("save_path", "string", "Path to save the index JSON file (default: ./document-index.json)", required = false)
         ),
         toolDef(
-            "search_index", "Search the document index using semantic similarity. Returns top matching chunks.",
+            "search_index", "Search the document index using semantic similarity. Returns top matching chunks. Uses OPENAI_API_KEY env var by default.",
             prop("query", "string", "Search query text"),
             prop("top_k", "integer", "Number of results to return (default: 5)", required = false),
             prop("min_score", "number", "Minimum similarity score 0.0-1.0 (default: 0.0)", required = false),
             prop("strategy_filter", "string", "Filter by chunking strategy: 'fixed' or 'structural' (default: all)", required = false),
-            prop("api_key", "string", "API key for embedding the query"),
+            prop("api_key", "string", "API key for embedding the query (default: OPENAI_API_KEY env var)", required = false),
             prop("base_url", "string", "Base URL for the embeddings API (default: https://api.openai.com)", required = false),
             prop("model", "string", "Embedding model name (default: text-embedding-3-small)", required = false)
         ),
@@ -228,7 +236,7 @@ class IndexingMcpServer {
         }
 
         val strategy = args.optString("strategy", "both")
-        val apiKey = args.getString("api_key")
+        val apiKey = resolveApiKey(args)
         val baseUrl = args.optString("base_url", "https://api.openai.com")
         val model = args.optString("model", "text-embedding-3-small")
         val chunkSize = args.optInt("chunk_size", 500).coerceIn(100, 5000)
@@ -308,7 +316,7 @@ class IndexingMcpServer {
         val topK = args.optInt("top_k", 5).coerceIn(1, 50)
         val minScore = args.optDouble("min_score", 0.0).toFloat()
         val strategyFilter = args.optString("strategy_filter", "")
-        val apiKey = args.getString("api_key")
+        val apiKey = resolveApiKey(args)
         val baseUrl = args.optString("base_url", "https://api.openai.com")
         val model = args.optString("model", "text-embedding-3-small")
 

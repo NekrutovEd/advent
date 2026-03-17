@@ -3,6 +3,8 @@ package ui
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.expandVertically
 import androidx.compose.animation.shrinkVertically
+import androidx.compose.foundation.background
+import androidx.compose.foundation.gestures.detectDragGestures
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
@@ -12,6 +14,10 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.input.pointer.PointerIcon
+import androidx.compose.ui.input.pointer.pointerHoverIcon
+import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import i18n.LocalStrings
@@ -238,60 +244,70 @@ fun App(appState: AppState) {
                         }
                     }
 
-                    // Dynamic chat area with minimum width and horizontal scroll
+                    // Dynamic chat area with resizable columns
                     val activeSession = appState.activeSession
+                    val chatCount = activeSession.chats.size
+                    // Persistent widths per session — reset when chat count changes
+                    val chatWidths = remember(activeSession, chatCount) {
+                        mutableStateListOf(*FloatArray(chatCount) { 350f }.toTypedArray())
+                    }
+                    // Sync list size if chats added/removed
+                    if (chatWidths.size < chatCount) {
+                        repeat(chatCount - chatWidths.size) { chatWidths.add(350f) }
+                    } else if (chatWidths.size > chatCount) {
+                        repeat(chatWidths.size - chatCount) { chatWidths.removeLastOrNull() }
+                    }
+                    val density = LocalDensity.current
+
                     Row(modifier = Modifier.weight(1f).fillMaxWidth()) {
-                        BoxWithConstraints(modifier = Modifier.weight(1f).fillMaxHeight()) {
-                            val chatCount = activeSession.chats.size.coerceAtLeast(1)
-                            val scrollAreaWidth = maxWidth - 48.dp
-                            val chatWidth = maxOf(scrollAreaWidth - 28.dp, scrollAreaWidth / chatCount)
-
-                            Row(modifier = Modifier.fillMaxSize()) {
-                                // Scrollable chats
-                                Row(
-                                    modifier = Modifier
-                                        .weight(1f)
-                                        .fillMaxHeight()
-                                        .horizontalScroll(rememberScrollState())
-                                ) {
-                                    activeSession.chats.forEachIndexed { index, chatState ->
-                                        if (index > 0) {
-                                            VerticalDivider()
+                        // Scrollable chats with resize handles
+                        Row(
+                            modifier = Modifier
+                                .weight(1f)
+                                .fillMaxHeight()
+                                .horizontalScroll(rememberScrollState())
+                        ) {
+                            activeSession.chats.forEachIndexed { index, chatState ->
+                                ChatColumn(
+                                    title = s.chatTitle(index),
+                                    chatState = chatState,
+                                    prompt = prompt,
+                                    onSend = {
+                                        val session = appState.activeSession
+                                        val isFirst = session.chats.all { it.messages.isEmpty() }
+                                        val sessionIdx = appState.activeSessionIndex
+                                        val capturedPrompt = prompt
+                                        appState.sendToOne(chatState, capturedPrompt, scope)
+                                        if (isFirst && session.name == "New") {
+                                            appState.autoRenameSession(sessionIdx, capturedPrompt, scope)
                                         }
+                                    },
+                                    enabled = !chatState.isLoading && hasApiKey,
+                                    onClone = { activeSession.cloneChat(index) },
+                                    onDrop = if (index > 0) {{ activeSession.removeChat(index) }} else null,
+                                    availableModels = appState.settings.allModels(),
+                                    globalModel = appState.settings.selectedModel,
+                                    modifier = Modifier
+                                        .width(with(density) { chatWidths[index].toDp() })
+                                        .fillMaxHeight()
+                                )
 
-                                        ChatColumn(
-                                            title = s.chatTitle(index),
-                                            chatState = chatState,
-                                            prompt = prompt,
-                                            onSend = {
-                                                val session = appState.activeSession
-                                                val isFirst = session.chats.all { it.messages.isEmpty() }
-                                                val sessionIdx = appState.activeSessionIndex
-                                                val capturedPrompt = prompt
-                                                appState.sendToOne(chatState, capturedPrompt, scope)
-                                                if (isFirst && session.name == "New") {
-                                                    appState.autoRenameSession(sessionIdx, capturedPrompt, scope)
-                                                }
-                                            },
-                                            enabled = !chatState.isLoading && hasApiKey,
-                                            onClone = { activeSession.cloneChat(index) },
-                                            onDrop = if (index > 0) {{ activeSession.removeChat(index) }} else null,
-                                            availableModels = appState.settings.allModels(),
-                                            globalModel = appState.settings.selectedModel,
-                                            modifier = Modifier.width(350.dp).fillMaxHeight()
-                                        )
+                                // Draggable resize handle after each chat
+                                ResizeHandle(
+                                    onDrag = { deltaPx ->
+                                        val newWidth = (chatWidths[index] + deltaPx).coerceIn(200f, 1200f)
+                                        chatWidths[index] = newWidth
                                     }
-                                }
-
-                                // Add chat button — always visible outside scroll
-                                VerticalDivider()
-                                TextButton(
-                                    onClick = { activeSession.addChat() },
-                                    modifier = Modifier.fillMaxHeight().width(48.dp)
-                                ) {
-                                    Text("+", style = MaterialTheme.typography.headlineMedium)
-                                }
+                                )
                             }
+                        }
+
+                        // Add chat button — always visible outside scroll
+                        TextButton(
+                            onClick = { activeSession.addChat() },
+                            modifier = Modifier.fillMaxHeight().width(48.dp)
+                        ) {
+                            Text("+", style = MaterialTheme.typography.headlineMedium)
                         }
 
                         if (appState.showMemoryPanel) {
@@ -374,4 +390,43 @@ private fun ChatColumn(
         onClone = onClone,
         onDrop = onDrop
     )
+}
+
+/**
+ * Draggable vertical resize handle between chat columns.
+ * Shows a thin line that becomes highlighted on hover/drag.
+ */
+@Composable
+private fun ResizeHandle(
+    onDrag: (deltaPx: Float) -> Unit
+) {
+    val hoverColor = MaterialTheme.colorScheme.primary.copy(alpha = 0.5f)
+    val idleColor = MaterialTheme.colorScheme.outlineVariant
+    var isDragging by remember { mutableStateOf(false) }
+
+    Box(
+        modifier = Modifier
+            .width(6.dp)
+            .fillMaxHeight()
+            .pointerHoverIcon(PointerIcon.Hand)
+            .pointerInput(Unit) {
+                detectDragGestures(
+                    onDragStart = { isDragging = true },
+                    onDragEnd = { isDragging = false },
+                    onDragCancel = { isDragging = false },
+                    onDrag = { change, dragAmount ->
+                        change.consume()
+                        onDrag(dragAmount.x)
+                    }
+                )
+            },
+        contentAlignment = Alignment.Center
+    ) {
+        Box(
+            modifier = Modifier
+                .width(2.dp)
+                .fillMaxHeight()
+                .background(if (isDragging) hoverColor else idleColor)
+        )
+    }
 }

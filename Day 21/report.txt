@@ -1,129 +1,0 @@
-╔══════════════════════════════════════════════════════════╗
-║       Day 21: Document Indexing Pipeline — Report       ║
-╚══════════════════════════════════════════════════════════╝
-
-═══ Corpus ═══
-Documents: 18
-Total characters: 214931
-Estimated pages: ~107
-
-Files:
-  SchedulerMcpServer.kt          kt   28988 chars
-  PipelineMcpServer.kt           kt   25824 chars
-  GitMcpServer.kt                kt   23526 chars
-  AppState.kt                    kt   16371 chars
-  ChatApi.kt                     kt   15532 chars
-  agent_orchestration.md         md   13837 chars
-  SYSTEM_OVERVIEW.md             md   9995 chars
-  McpClient.kt                   kt   9454 chars
-  android_app.md                 md   8911 chars
-  plugin_android_studio.md       md   8857 chars
-  push_notifications.md          md   8531 chars
-  terminal_renderer.md           md   8441 chars
-  ChunkingStrategy.kt            kt   8315 chars
-  mdns_discovery.md              md   8081 chars
-  McpOrchestrator.kt             kt   6434 chars
-  DocumentIndex.kt               kt   6038 chars
-  SETUP.md                       md   4035 chars
-  EmbeddingClient.kt             kt   3761 chars
-
-═══ Chunking Strategy Comparison ═══
-
-Strategy 1: Fixed-size (chunk_size=500, overlap=100)
-  Chunks:      568
-  Avg length:  470 chars
-  Min / Max:   88 / 500
-  Median:      492
-  Coverage:    267228 chars (124%)
-
-Strategy 2: Structural (headings / code declarations / paragraphs)
-  Chunks:      166
-  Avg length:  1260 chars
-  Min / Max:   9 / 24504
-  Median:      416
-  Coverage:    209211 chars (97%)
-
-  Unique sections (top 20):
-    - Компонент: Оркестрация агентов Claude Code
-    - Назначение
-    - Два режима запуска агентов
-    - 1. Интерактивный режим
-    - 2. Batch (headless) режим
-    - Структура компонента в плагине
-    - Реализация
-    - AgentLauncher — запуск интерактивного агента
-    - ProjectRegistry — список проектов
-    - ClaudeCliRunner — batch выполнение со стримингом
-    - AgentLifecycleMonitor — отслеживание состояний
-    - Расширение WebSocket протокола
-    - Новые фреймы для оркестрации
-    - Новые экраны в Android App
-    - LaunchAgentScreen
-    - AgentDashboard (обновлённый главный экран)
-    - BatchResultScreen
-    - Параллельный запуск нескольких агентов
-    - claude CLI флаги для разных сценариев
-    - Безопасность
-    ... and 124 more
-
-Verdict:
-  Fixed-size: 568 uniform chunks — good for consistent embedding quality,
-    but may split mid-sentence or mid-function. Overlap mitigates boundary losses.
-  Structural: 166 semantically coherent chunks — preserves document
-    structure, but sizes vary widely (9–24504 chars).
-  Combining both strategies in the index gives the best retrieval quality —
-    fixed chunks handle long prose, structural chunks handle code and headings.
-
-═══ Embeddings ═══
-Model: text-embedding-3-small
-Total embeddings: 734
-Dimension: 1536
-Generation time: 17583ms
-Avg time per chunk: 24,0ms
-
-═══ Index ═══
-Total entries: 734
-Documents: 18
-By strategy: {fixed=568, structural=166}
-
-═══ Test Search Results ═══
-
-Query: "MCP server JSON-RPC protocol"
-  1. [structural] score=0,6461 | GitMcpServer.kt / header
-     package mcp.server  import org.json.JSONArray import org.json.JSONObject import java.io.BufferedRead
-  2. [fixed     ] score=0,6360 | GitMcpServer.kt / chunk 0
-     package mcp.server  import org.json.JSONArray import org.json.JSONObject import java.io.Buffered
-  3. [structural] score=0,6262 | PipelineMcpServer.kt / header
-     package mcp.server  import org.json.JSONArray import org.json.JSONObject import java.io.BufferedRead
-
-Query: "how to generate embeddings"
-  1. [structural] score=0,4824 | EmbeddingClient.kt / class EmbeddingClient(
-     class EmbeddingClient(     private val baseUrl: String = "https://api.openai.com",     private val a
-  2. [fixed     ] score=0,4732 | EmbeddingClient.kt / chunk 3
-     pty()) return emptyList()          val allEmbeddings = mutableListOf<FloatArray>()          for 
-  3. [fixed     ] score=0,4331 | EmbeddingClient.kt / chunk 2
-     SON_MEDIA = "application/json; charset=utf-8".toMediaType()         private const val BATCH_SIZE = 
-
-Query: "Android app architecture"
-  1. [fixed     ] score=0,4743 | android_app.md / chunk 22
-     oid:1.x.x")     implementation("androidx.compose.ui:ui:...")     implementation("androidx.compose.
-  2. [structural] score=0,4720 | android_app.md / Структура проекта
-     ## Структура проекта  ``` remoteclaude-app/ ├── app/src/main/kotlin/ │   ├── MainActivity.kt │   ├──
-  3. [structural] score=0,4711 | mdns_discovery.md / Реализация на стороне Android App (NsdManager)
-     ## Реализация на стороне Android App (NsdManager)
-
-Query: "Git operations and commands"
-  1. [fixed     ] score=0,5269 | GitMcpServer.kt / chunk 49
-     ")                 runGit(dir, "remote", "add", name, url)             }             "remove" -> 
-  2. [fixed     ] score=0,5206 | GitMcpServer.kt / chunk 26
-     "git_branch_delete" -> execGitBranchDelete(args)                 "git_checkout" -> execGitCheckout(
-  3. [fixed     ] score=0,5091 | GitMcpServer.kt / chunk 25
-     ecGitClone(args)                 "git_status" -> execGitStatus(args)                 "git_add" -> 
-
-Query: "task scheduling and cron"
-  1. [fixed     ] score=0,5111 | SchedulerMcpServer.kt / chunk 50
-     uledTask(             type = type,             scheduleType = TaskScheduleType.RECURRING,        
-  2. [fixed     ] score=0,5029 | SchedulerMcpServer.kt / chunk 1
-     in/stdout.  *  * Supported tools: schedule_once, schedule_recurring, list_tasks,  * cancel_task, 
-  3. [structural] score=0,4902 | SchedulerMcpServer.kt / enum class TaskScheduleType { ONCE, RECURRING }
-     enum class TaskScheduleType { ONCE, RECURRING }
