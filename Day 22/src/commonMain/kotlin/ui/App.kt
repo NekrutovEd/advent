@@ -4,7 +4,9 @@ import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.expandVertically
 import androidx.compose.animation.shrinkVertically
 import androidx.compose.foundation.background
-import androidx.compose.foundation.gestures.detectDragGestures
+import androidx.compose.foundation.gestures.Orientation
+import androidx.compose.foundation.gestures.draggable
+import androidx.compose.foundation.gestures.rememberDraggableState
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
@@ -16,7 +18,6 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.input.pointer.PointerIcon
 import androidx.compose.ui.input.pointer.pointerHoverIcon
-import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -411,7 +412,8 @@ private fun ChatColumn(
 
 /**
  * Draggable vertical resize handle between chat columns.
- * Shows a thin line that becomes highlighted on hover/drag.
+ * Uses Modifier.draggable() to integrate with nested scroll and
+ * properly intercept horizontal drags inside a horizontalScroll parent.
  */
 @Composable
 private fun ResizeHandle(
@@ -423,20 +425,15 @@ private fun ResizeHandle(
 
     Box(
         modifier = Modifier
-            .width(6.dp)
+            .width(8.dp)
             .fillMaxHeight()
             .pointerHoverIcon(PointerIcon.Hand)
-            .pointerInput(Unit) {
-                detectDragGestures(
-                    onDragStart = { isDragging = true },
-                    onDragEnd = { isDragging = false },
-                    onDragCancel = { isDragging = false },
-                    onDrag = { change, dragAmount ->
-                        change.consume()
-                        onDrag(dragAmount.x)
-                    }
-                )
-            },
+            .draggable(
+                orientation = Orientation.Horizontal,
+                state = rememberDraggableState { delta -> onDrag(delta) },
+                onDragStarted = { isDragging = true },
+                onDragStopped = { isDragging = false }
+            ),
         contentAlignment = Alignment.Center
     ) {
         Box(
