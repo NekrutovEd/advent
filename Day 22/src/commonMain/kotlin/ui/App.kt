@@ -113,6 +113,23 @@ fun App(appState: AppState) {
                             modifier = Modifier.weight(1f)
                         )
 
+                        // RAG status badge
+                        val ragReady = appState.ragProvider?.isReady == true
+                        if (ragReady) {
+                            Surface(
+                                color = MaterialTheme.colorScheme.tertiaryContainer,
+                                shape = MaterialTheme.shapes.small,
+                                modifier = Modifier.padding(horizontal = 4.dp)
+                            ) {
+                                Text(
+                                    "RAG",
+                                    style = MaterialTheme.typography.labelSmall,
+                                    color = MaterialTheme.colorScheme.onTertiaryContainer,
+                                    modifier = Modifier.padding(horizontal = 8.dp, vertical = 2.dp)
+                                )
+                            }
+                        }
+
                         // MCP orchestrator status badge
                         val orch = appState.orchestrator
                         if (orch != null && orch.connectedCount > 0) {

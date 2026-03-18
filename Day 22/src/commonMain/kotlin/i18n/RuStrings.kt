@@ -88,6 +88,12 @@ object RuStrings : Strings {
 
     // Task tracking
     override val optionTaskTracking = "Отслеживание задач"
+    override val optionRag = "RAG"
+    override val ragEnabled = "RAG включён"
+    override val ragDisabled = "RAG выключен"
+    override val ragLoading = "Загрузка RAG-индекса..."
+    override val ragSourcesLabel = "Использованные источники:"
+    override val ragNoIndex = "Индекс не загружен"
     override val taskTrackingLabel = "Отслеживать фазы задачи"
     override val taskPlanning = "План"
     override val taskExecution = "Выполн."

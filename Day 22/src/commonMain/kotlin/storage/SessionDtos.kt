@@ -47,6 +47,7 @@ data class ChatStateDto(
     val extractMemory: Boolean = false,
     val taskTracking: Boolean = true,
     val taskTracker: TaskTrackerDto = TaskTrackerDto(),
+    val ragEnabled: Boolean = false,
     val visibleOptions: List<String>,
     val messages: List<ChatMessageDto>,
     val history: List<ChatMessageDto>

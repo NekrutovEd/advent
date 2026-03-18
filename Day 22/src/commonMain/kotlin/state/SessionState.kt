@@ -82,6 +82,7 @@ class SessionState(
         clone.taskTracker.steps.addAll(source.taskTracker.steps)
         clone.taskTracker.currentStepIndex = source.taskTracker.currentStepIndex
         clone.taskTracker.taskDescription = source.taskTracker.taskDescription
+        clone.ragEnabled = source.ragEnabled
         clone.stopWords.clear()
         clone.stopWords.addAll(source.stopWords)
         clone.visibleOptions = source.visibleOptions
@@ -105,7 +106,8 @@ class SessionState(
         timestamp: Long = 0L,
         onLongTermExtracted: ((List<String>) -> Unit)? = null,
         mcpTools: List<McpTool>? = null,
-        toolExecutor: (suspend (String, String) -> String)? = null
+        toolExecutor: (suspend (String, String) -> String)? = null,
+        ragProvider: RagProvider? = null
     ): List<Job> {
         if (prompt.isBlank()) return emptyList()
 
@@ -128,6 +130,19 @@ class SessionState(
             val jsonSchema = chat.jsonSchema
 
             supervisorScope.launch {
+                // RAG: search for relevant context if enabled for this chat
+                val ragContext = if (chat.ragEnabled && ragProvider != null && ragProvider.isReady) {
+                    try {
+                        val ragResult = ragProvider.search(prompt)
+                        if (ragResult.chunks.isNotEmpty()) {
+                            chat.lastRagSources = ragResult.chunks.joinToString("\n") {
+                                "${it.source} (${it.section}) — score: ${"%.2f".format(it.score)}"
+                            }
+                        }
+                        ragProvider.buildContext(ragResult)
+                    } catch (_: Exception) { "" }
+                } else ""
+
                 chat.sendMessage(
                     chatPrompt, apiConfig.apiKey, model, effectiveTemperature, effectiveMaxTokens,
                     combinedSystemPrompt, apiConfig.connectTimeoutSec(), apiConfig.readTimeoutSec(),
@@ -146,7 +161,8 @@ class SessionState(
                     mcpTools = mcpTools,
                     toolExecutor = toolExecutor,
                     schedulerChatId = if (mcpTools != null) chat.id else "",
-                    schedulerSessionId = if (mcpTools != null) id else ""
+                    schedulerSessionId = if (mcpTools != null) id else "",
+                    ragContextText = ragContext
                 )
             }
         }
@@ -163,7 +179,8 @@ class SessionState(
         onLongTermExtracted: ((List<String>) -> Unit)? = null,
         mcpTools: List<McpTool>? = null,
         toolExecutor: (suspend (String, String) -> String)? = null,
-        hideUserMessage: Boolean = false
+        hideUserMessage: Boolean = false,
+        ragProvider: RagProvider? = null
     ): Job? {
         if (prompt.isBlank()) return null
 
@@ -182,6 +199,19 @@ class SessionState(
         val wmText = workingMemoryText()
 
         return scope.launch {
+            // RAG: search for relevant context if enabled for this chat
+            val ragContext = if (chat.ragEnabled && ragProvider != null && ragProvider.isReady) {
+                try {
+                    val ragResult = ragProvider.search(prompt)
+                    if (ragResult.chunks.isNotEmpty()) {
+                        chat.lastRagSources = ragResult.chunks.joinToString("\n") {
+                            "${it.source} (${it.section}) — score: ${"%.2f".format(it.score)}"
+                        }
+                    }
+                    ragProvider.buildContext(ragResult)
+                } catch (_: Exception) { "" }
+            } else ""
+
             chat.sendMessage(
                 chatPrompt, apiConfig.apiKey, model, effectiveTemperature, effectiveMaxTokens,
                 combinedSystemPrompt, apiConfig.connectTimeoutSec(), apiConfig.readTimeoutSec(),
@@ -201,7 +231,8 @@ class SessionState(
                 toolExecutor = toolExecutor,
                 schedulerChatId = if (mcpTools != null) chat.id else "",
                 schedulerSessionId = if (mcpTools != null) id else "",
-                hideUserMessage = hideUserMessage
+                hideUserMessage = hideUserMessage,
+                ragContextText = ragContext
             )
         }
     }

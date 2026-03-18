@@ -19,7 +19,8 @@ import storage.NoOpStorage
 class AppState(
     internal val chatApi: ChatApiInterface,
     private val storage: StorageManager = NoOpStorage,
-    mcpClientFactory: (() -> McpClientInterface)? = null
+    mcpClientFactory: (() -> McpClientInterface)? = null,
+    val ragProvider: RagProvider? = null
 ) {
     val orchestrator: McpOrchestrator? = mcpClientFactory?.let { McpOrchestrator(it) }
     val settings = SettingsState()
@@ -180,7 +181,8 @@ class AppState(
                 items.forEach { addLongTermMemoryItem(it, MemorySource.AUTO_EXTRACTED, currentTimeMs()) }
             },
             mcpTools = mcpToolsOrNull(),
-            toolExecutor = mcpToolExecutor()
+            toolExecutor = mcpToolExecutor(),
+            ragProvider = ragProvider
         )
 
     fun sendToOne(chat: ChatState, prompt: String, scope: CoroutineScope): Job? =
@@ -194,7 +196,8 @@ class AppState(
                 items.forEach { addLongTermMemoryItem(it, MemorySource.AUTO_EXTRACTED, currentTimeMs()) }
             },
             mcpTools = mcpToolsOrNull(),
-            toolExecutor = mcpToolExecutor()
+            toolExecutor = mcpToolExecutor(),
+            ragProvider = ragProvider
         )
 
     // Scheduled message delivery — sends a prompt into a specific chat as an AI roundtrip

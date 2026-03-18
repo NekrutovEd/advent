@@ -13,5 +13,7 @@ data class ChatMessage(
     val invariantViolation: String? = null,
     // Tool calling support
     val toolCalls: List<ToolCall>? = null,
-    val toolCallId: String? = null
+    val toolCallId: String? = null,
+    // RAG sources used for this response
+    val ragSources: String? = null
 )

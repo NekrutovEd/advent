@@ -147,6 +147,7 @@ object SessionSerializer {
                     extractFacts = chat.extractMemory, // backward compat
                     extractMemory = chat.extractMemory,
                     taskTracking = chat.taskTracking,
+                    ragEnabled = chat.ragEnabled,
                     taskTracker = TaskTrackerDto(
                         phase = chat.taskTracker.phase.name,
                         isPaused = chat.taskTracker.isPaused,
@@ -190,6 +191,7 @@ object SessionSerializer {
             chat.slidingWindow = chatDto.slidingWindow
             chat.extractMemory = chatDto.extractMemory || chatDto.extractFacts
             chat.taskTracking = chatDto.taskTracking
+            chat.ragEnabled = chatDto.ragEnabled
             val tt = chatDto.taskTracker
             chat.taskTracker.phase = runCatching { TaskPhase.valueOf(tt.phase) }.getOrDefault(TaskPhase.IDLE)
             chat.taskTracker.isPaused = tt.isPaused

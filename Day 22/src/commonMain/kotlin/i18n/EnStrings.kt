@@ -88,6 +88,12 @@ object EnStrings : Strings {
 
     // Task tracking
     override val optionTaskTracking = "Task Tracking"
+    override val optionRag = "RAG"
+    override val ragEnabled = "RAG enabled"
+    override val ragDisabled = "RAG disabled"
+    override val ragLoading = "Loading RAG index..."
+    override val ragSourcesLabel = "Sources used:"
+    override val ragNoIndex = "No index loaded"
     override val taskTrackingLabel = "Track task phases"
     override val taskPlanning = "Plan"
     override val taskExecution = "Execute"

@@ -12,7 +12,8 @@ enum class ChatOption {
     CONTEXT,
     MODEL,
     TEMPERATURE,
-    TASK_TRACKING;
+    TASK_TRACKING,
+    RAG;
 
     fun label(strings: Strings): String = when (this) {
         STATISTICS -> strings.optionStatistics
@@ -25,5 +26,6 @@ enum class ChatOption {
         MODEL -> strings.model
         TEMPERATURE -> strings.optionTemperature
         TASK_TRACKING -> strings.optionTaskTracking
+        RAG -> strings.optionRag
     }
 }

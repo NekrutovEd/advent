@@ -111,9 +111,48 @@ fun MessageBubble(message: ChatMessage) {
                         modifier = Modifier.padding(
                             start = 12.dp, end = 12.dp,
                             top = if (isUser && snapshot != null) 2.dp else 12.dp,
-                            bottom = 12.dp
+                            bottom = if (!isUser && message.ragSources != null) 4.dp else 12.dp
                         )
                     )
+                }
+
+                // RAG sources banner
+                if (!isUser && message.ragSources != null) {
+                    var ragExpanded by remember { mutableStateOf(false) }
+                    Surface(
+                        color = MaterialTheme.colorScheme.tertiaryContainer.copy(alpha = 0.5f),
+                        shape = RoundedCornerShape(6.dp),
+                        modifier = Modifier.fillMaxWidth().padding(horizontal = 8.dp, vertical = 4.dp)
+                    ) {
+                        Column(modifier = Modifier.padding(6.dp)) {
+                            Row(
+                                modifier = Modifier.fillMaxWidth().clickable { ragExpanded = !ragExpanded },
+                                horizontalArrangement = Arrangement.SpaceBetween,
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Text(
+                                    text = "RAG",
+                                    style = MaterialTheme.typography.labelSmall,
+                                    color = MaterialTheme.colorScheme.onTertiaryContainer
+                                )
+                                Text(
+                                    text = if (ragExpanded) "\u25B4" else "\u25BE",
+                                    style = MaterialTheme.typography.labelSmall,
+                                    color = MaterialTheme.colorScheme.onTertiaryContainer
+                                )
+                            }
+                            if (ragExpanded) {
+                                SelectionContainer {
+                                    Text(
+                                        text = message.ragSources,
+                                        style = MaterialTheme.typography.bodySmall,
+                                        color = MaterialTheme.colorScheme.onTertiaryContainer,
+                                        modifier = Modifier.padding(top = 4.dp)
+                                    )
+                                }
+                            }
+                        }
+                    }
                 }
             }
         }

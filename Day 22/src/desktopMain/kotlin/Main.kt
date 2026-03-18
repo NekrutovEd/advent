@@ -1,9 +1,11 @@
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.remember
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.Window
 import androidx.compose.ui.window.application
 import androidx.compose.ui.window.rememberWindowState
 import api.ChatApi
+import indexing.RagEngine
 import mcp.McpClient
 import state.AppState
 import storage.FileStorageManager
@@ -15,10 +17,20 @@ fun main() = application {
     val appState = remember {
         val storageDir = System.getProperty("user.home") + "/.ai-advent"
         val fileKeys = loadApiKeysFromFile(storageDir)
+
+        // Resolve OpenAI API key for embeddings (RAG)
+        val openaiKey = System.getenv("OPENAI_API_KEY")?.takeIf { it.isNotBlank() }
+            ?: fileKeys["OPENAI_API_KEY"] ?: ""
+
+        val ragEngine = if (openaiKey.isNotBlank()) {
+            RagEngine(apiKey = openaiKey)
+        } else null
+
         AppState(
             ChatApi(),
             FileStorageManager(storageDir),
-            mcpClientFactory = { McpClient() }
+            mcpClientFactory = { McpClient() },
+            ragProvider = ragEngine
         ).also {
             it.settings.apiConfigs.forEach { config ->
                 val envName = "${config.id.uppercase()}_API_KEY"
@@ -30,9 +42,21 @@ fun main() = application {
 
     Window(
         onCloseRequest = { appState.saveToStorage(); exitApplication() },
-        title = "Day 20 — Orchestration MCP: Multi-Server Tool Routing",
+        title = "Day 22 — RAG: Retrieval-Augmented Generation",
         state = windowState
     ) {
+        // Auto-load RAG index on startup
+        LaunchedEffect(Unit) {
+            val indexFile = File("document-index.json")
+            if (indexFile.exists() && appState.ragProvider != null) {
+                try {
+                    appState.ragProvider.loadIndex(indexFile.absolutePath)
+                } catch (e: Exception) {
+                    System.err.println("Failed to load RAG index: ${e.message}")
+                }
+            }
+        }
+
         App(appState)
     }
 }

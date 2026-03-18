@@ -322,6 +322,41 @@ fun ChatPanel(
                 }
             }
         }
+        if (ChatOption.RAG in chatState.visibleOptions) {
+            Column(modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Switch(
+                        checked = chatState.ragEnabled,
+                        onCheckedChange = { chatState.ragEnabled = it }
+                    )
+                    Spacer(Modifier.width(8.dp))
+                    Text(
+                        if (chatState.ragEnabled) s.ragEnabled else s.ragDisabled,
+                        style = MaterialTheme.typography.bodyMedium
+                    )
+                }
+                if (chatState.ragEnabled && chatState.lastRagSources.isNotBlank()) {
+                    Surface(
+                        color = MaterialTheme.colorScheme.tertiaryContainer,
+                        shape = MaterialTheme.shapes.small,
+                        modifier = Modifier.fillMaxWidth().padding(top = 4.dp)
+                    ) {
+                        Column(modifier = Modifier.padding(8.dp)) {
+                            Text(
+                                s.ragSourcesLabel,
+                                style = MaterialTheme.typography.labelSmall,
+                                color = MaterialTheme.colorScheme.onTertiaryContainer
+                            )
+                            Text(
+                                chatState.lastRagSources,
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onTertiaryContainer
+                            )
+                        }
+                    }
+                }
+            }
+        }
         if (ChatOption.TEMPERATURE in chatState.visibleOptions) {
             val tempValue = chatState.temperatureOverride ?: 1.0f
             Column(modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)) {

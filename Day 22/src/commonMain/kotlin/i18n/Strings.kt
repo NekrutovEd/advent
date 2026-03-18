@@ -88,6 +88,12 @@ interface Strings {
 
     // Task tracking
     val optionTaskTracking: String
+    val optionRag: String
+    val ragEnabled: String
+    val ragDisabled: String
+    val ragLoading: String
+    val ragSourcesLabel: String
+    val ragNoIndex: String
     val taskTrackingLabel: String
     val taskPlanning: String
     val taskExecution: String
