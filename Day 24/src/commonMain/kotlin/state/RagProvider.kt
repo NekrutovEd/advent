@@ -9,7 +9,9 @@ data class RagResult(
     /** Number of candidates fetched before reranking (0 = no reranking). */
     val candidateCount: Int = 0,
     /** The query actually used for search (may differ from original if rewritten). */
-    val effectiveQuery: String = ""
+    val effectiveQuery: String = "",
+    /** Whether the top result score is below the confidence threshold (triggers "I don't know" mode). */
+    val lowConfidence: Boolean = false
 )
 
 data class RagChunk(
@@ -45,9 +47,13 @@ interface RagProvider {
     /** Search with configurable mode: plain / reranked / full (query rewrite + rerank). */
     suspend fun search(query: String, mode: RagMode): RagResult = search(query)
 
+    /** Confidence threshold: if top chunk score is below this, trigger "I don't know" mode. */
+    val confidenceThreshold: Float get() = 0.4f
+
     /** Build a context string from RAG results, suitable for injection into the prompt. */
     fun buildContext(result: RagResult): String {
-        if (result.chunks.isEmpty()) return ""
+        if (result.chunks.isEmpty()) return buildLowConfidenceContext()
+        if (result.lowConfidence) return buildLowConfidenceContext()
         return buildString {
             appendLine("[RAG Context — retrieved from document index]")
             if (result.candidateCount > 0) {
@@ -56,7 +62,6 @@ interface RagProvider {
             if (result.effectiveQuery.isNotBlank()) {
                 appendLine("Effective query: ${result.effectiveQuery}")
             }
-            appendLine("The following excerpts are relevant to the user's question:")
             appendLine()
             result.chunks.forEachIndexed { i, chunk ->
                 appendLine("--- Source ${i + 1}: ${chunk.source} (${chunk.section}) [score: ${"%.2f".format(chunk.score)}] ---")
@@ -64,7 +69,33 @@ interface RagProvider {
                 appendLine()
             }
             appendLine("--- End of RAG context ---")
-            appendLine("Use this context to inform your answer. Cite sources when applicable.")
+            appendLine()
+            appendLine(CITATION_INSTRUCTIONS)
         }
+    }
+
+    private fun buildLowConfidenceContext(): String = buildString {
+        appendLine("[RAG Context — no relevant documents found]")
+        appendLine()
+        appendLine(LOW_CONFIDENCE_INSTRUCTIONS)
+    }
+
+    companion object {
+        /** Instructions injected into the prompt to enforce structured citations. */
+        const val CITATION_INSTRUCTIONS = """IMPORTANT — you MUST follow these rules when answering:
+1. ANSWER: Provide a clear answer to the user's question based ONLY on the RAG context above.
+2. SOURCES: After your answer, include a "Sources:" section listing every source you used. Format each as:
+   - [source_file (section/chunk_id)]
+3. QUOTES: After sources, include a "Quotes:" section with verbatim excerpts from the context that support your answer. Format each as:
+   > "exact quote from the chunk" — source_file (section)
+4. Do NOT invent information not present in the context. If the context does not contain enough information, say so explicitly.
+5. Every claim in your answer MUST be backed by at least one quote from the context."""
+
+        /** Instructions for low-confidence / no-results mode. */
+        const val LOW_CONFIDENCE_INSTRUCTIONS = """The document index did not return sufficiently relevant results for this query.
+You MUST respond with:
+1. A clear statement that you don't have enough information to answer this question from the available documents.
+2. Suggest the user rephrase or clarify their question.
+Do NOT attempt to answer from your general knowledge — only document-grounded answers are allowed in RAG mode."""
     }
 }

@@ -53,17 +53,20 @@ class RagEngine(
         val results = idx.search(queryEmbedding, topK, minScore)
         val elapsed = System.currentTimeMillis() - startTime
 
+        val chunks = results.map { sr ->
+            RagChunk(
+                text = sr.chunk.text,
+                source = sr.chunk.metadata.source,
+                section = sr.chunk.metadata.section,
+                score = sr.score
+            )
+        }
+        val topScore = chunks.maxOfOrNull { it.score } ?: 0f
         return RagResult(
-            chunks = results.map { sr ->
-                RagChunk(
-                    text = sr.chunk.text,
-                    source = sr.chunk.metadata.source,
-                    section = sr.chunk.metadata.section,
-                    score = sr.score
-                )
-            },
+            chunks = chunks,
             queryTimeMs = elapsed,
-            effectiveQuery = query
+            effectiveQuery = query,
+            lowConfidence = topScore < confidenceThreshold
         )
     }
 
@@ -108,11 +111,13 @@ class RagEngine(
 
         val elapsed = System.currentTimeMillis() - startTime
 
+        val topScore = reranked.maxOfOrNull { it.score } ?: 0f
         return RagResult(
             chunks = reranked,
             queryTimeMs = elapsed,
             candidateCount = candidates.size,
-            effectiveQuery = if (rewriteQuery && effectiveQuery != query) effectiveQuery else query
+            effectiveQuery = if (rewriteQuery && effectiveQuery != query) effectiveQuery else query,
+            lowConfidence = topScore < confidenceThreshold
         )
     }
 }

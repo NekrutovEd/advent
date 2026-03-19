@@ -135,7 +135,9 @@ class SessionState(
                 val ragContext = if (chat.ragEnabled && ragProvider != null && ragProvider.isReady) {
                     try {
                         val ragResult = ragProvider.search(prompt, chat.ragMode)
-                        if (ragResult.chunks.isNotEmpty()) {
+                        if (ragResult.lowConfidence || ragResult.chunks.isEmpty()) {
+                            chat.lastRagSources = "Low confidence — no relevant sources found\nMode: ${chat.ragMode.label}"
+                        } else if (ragResult.chunks.isNotEmpty()) {
                             val pipelineInfo = if (ragResult.candidateCount > 0)
                                 " [${ragResult.chunks.size}/${ragResult.candidateCount}]" else ""
                             chat.lastRagSources = ragResult.chunks.joinToString("\n") {
@@ -206,7 +208,9 @@ class SessionState(
             val ragContext = if (chat.ragEnabled && ragProvider != null && ragProvider.isReady) {
                 try {
                     val ragResult = ragProvider.search(prompt, chat.ragMode)
-                    if (ragResult.chunks.isNotEmpty()) {
+                    if (ragResult.lowConfidence || ragResult.chunks.isEmpty()) {
+                        chat.lastRagSources = "Low confidence — no relevant sources found\nMode: ${chat.ragMode.label}"
+                    } else if (ragResult.chunks.isNotEmpty()) {
                         val pipelineInfo = if (ragResult.candidateCount > 0)
                             " [${ragResult.chunks.size}/${ragResult.candidateCount}]" else ""
                         chat.lastRagSources = ragResult.chunks.joinToString("\n") {
