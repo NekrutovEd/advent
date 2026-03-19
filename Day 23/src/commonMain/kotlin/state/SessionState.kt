@@ -83,6 +83,7 @@ class SessionState(
         clone.taskTracker.currentStepIndex = source.taskTracker.currentStepIndex
         clone.taskTracker.taskDescription = source.taskTracker.taskDescription
         clone.ragEnabled = source.ragEnabled
+        clone.ragMode = source.ragMode
         clone.stopWords.clear()
         clone.stopWords.addAll(source.stopWords)
         clone.visibleOptions = source.visibleOptions
@@ -133,11 +134,13 @@ class SessionState(
                 // RAG: search for relevant context if enabled for this chat
                 val ragContext = if (chat.ragEnabled && ragProvider != null && ragProvider.isReady) {
                     try {
-                        val ragResult = ragProvider.search(prompt)
+                        val ragResult = ragProvider.search(prompt, chat.ragMode)
                         if (ragResult.chunks.isNotEmpty()) {
+                            val pipelineInfo = if (ragResult.candidateCount > 0)
+                                " [${ragResult.chunks.size}/${ragResult.candidateCount}]" else ""
                             chat.lastRagSources = ragResult.chunks.joinToString("\n") {
                                 "${it.source} (${it.section}) — score: ${"%.2f".format(it.score)}"
-                            }
+                            } + "\nMode: ${chat.ragMode.label}$pipelineInfo"
                         }
                         ragProvider.buildContext(ragResult)
                     } catch (_: Exception) { "" }
@@ -202,11 +205,13 @@ class SessionState(
             // RAG: search for relevant context if enabled for this chat
             val ragContext = if (chat.ragEnabled && ragProvider != null && ragProvider.isReady) {
                 try {
-                    val ragResult = ragProvider.search(prompt)
+                    val ragResult = ragProvider.search(prompt, chat.ragMode)
                     if (ragResult.chunks.isNotEmpty()) {
+                        val pipelineInfo = if (ragResult.candidateCount > 0)
+                            " [${ragResult.chunks.size}/${ragResult.candidateCount}]" else ""
                         chat.lastRagSources = ragResult.chunks.joinToString("\n") {
                             "${it.source} (${it.section}) — score: ${"%.2f".format(it.score)}"
-                        }
+                        } + "\nMode: ${chat.ragMode.label}$pipelineInfo"
                     }
                     ragProvider.buildContext(ragResult)
                 } catch (_: Exception) { "" }

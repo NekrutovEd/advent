@@ -94,6 +94,7 @@ object RuStrings : Strings {
     override val ragLoading = "Загрузка RAG-индекса..."
     override val ragSourcesLabel = "Использованные источники:"
     override val ragNoIndex = "Индекс не загружен"
+    override val ragModeLabel = "Режим:"
     override val taskTrackingLabel = "Отслеживать фазы задачи"
     override val taskPlanning = "План"
     override val taskExecution = "Выполн."

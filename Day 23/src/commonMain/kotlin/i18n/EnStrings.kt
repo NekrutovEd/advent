@@ -94,6 +94,7 @@ object EnStrings : Strings {
     override val ragLoading = "Loading RAG index..."
     override val ragSourcesLabel = "Sources used:"
     override val ragNoIndex = "No index loaded"
+    override val ragModeLabel = "Mode:"
     override val taskTrackingLabel = "Track task phases"
     override val taskPlanning = "Plan"
     override val taskExecution = "Execute"

@@ -48,6 +48,7 @@ data class ChatStateDto(
     val taskTracking: Boolean = true,
     val taskTracker: TaskTrackerDto = TaskTrackerDto(),
     val ragEnabled: Boolean = false,
+    val ragMode: String = "RERANKED",
     val visibleOptions: List<String>,
     val messages: List<ChatMessageDto>,
     val history: List<ChatMessageDto>

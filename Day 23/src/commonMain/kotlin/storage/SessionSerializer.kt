@@ -10,6 +10,7 @@ import state.SessionState
 import state.TaskPhase
 import state.TaskStep
 import state.UserProfile
+import state.RagMode
 import state.buildMemoryId
 
 object SessionSerializer {
@@ -148,6 +149,7 @@ object SessionSerializer {
                     extractMemory = chat.extractMemory,
                     taskTracking = chat.taskTracking,
                     ragEnabled = chat.ragEnabled,
+                    ragMode = chat.ragMode.name,
                     taskTracker = TaskTrackerDto(
                         phase = chat.taskTracker.phase.name,
                         isPaused = chat.taskTracker.isPaused,
@@ -192,6 +194,7 @@ object SessionSerializer {
             chat.extractMemory = chatDto.extractMemory || chatDto.extractFacts
             chat.taskTracking = chatDto.taskTracking
             chat.ragEnabled = chatDto.ragEnabled
+            chat.ragMode = runCatching { RagMode.valueOf(chatDto.ragMode) }.getOrDefault(RagMode.RERANKED)
             val tt = chatDto.taskTracker
             chat.taskTracker.phase = runCatching { TaskPhase.valueOf(tt.phase) }.getOrDefault(TaskPhase.IDLE)
             chat.taskTracker.isPaused = tt.isPaused

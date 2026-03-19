@@ -77,6 +77,7 @@ class ChatState(
 
     // RAG (Retrieval-Augmented Generation)
     var ragEnabled by mutableStateOf(false)
+    var ragMode by mutableStateOf(RagMode.RERANKED)
     var lastRagSources by mutableStateOf("")
 
     private val history = mutableListOf<ChatMessage>()

@@ -94,6 +94,7 @@ interface Strings {
     val ragLoading: String
     val ragSourcesLabel: String
     val ragNoIndex: String
+    val ragModeLabel: String
     val taskTrackingLabel: String
     val taskPlanning: String
     val taskExecution: String

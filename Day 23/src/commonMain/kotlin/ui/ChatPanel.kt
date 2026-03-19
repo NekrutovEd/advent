@@ -19,6 +19,7 @@ import androidx.compose.ui.unit.dp
 import i18n.LocalStrings
 import state.ChatOption
 import state.ChatState
+import state.RagMode
 
 @Composable
 fun ChatPanel(
@@ -335,23 +336,41 @@ fun ChatPanel(
                         style = MaterialTheme.typography.bodyMedium
                     )
                 }
-                if (chatState.ragEnabled && chatState.lastRagSources.isNotBlank()) {
-                    Surface(
-                        color = MaterialTheme.colorScheme.tertiaryContainer,
-                        shape = MaterialTheme.shapes.small,
-                        modifier = Modifier.fillMaxWidth().padding(top = 4.dp)
+                if (chatState.ragEnabled) {
+                    // RAG mode selector
+                    Row(
+                        modifier = Modifier.padding(top = 4.dp),
+                        horizontalArrangement = Arrangement.spacedBy(4.dp),
+                        verticalAlignment = Alignment.CenterVertically
                     ) {
-                        Column(modifier = Modifier.padding(8.dp)) {
-                            Text(
-                                s.ragSourcesLabel,
-                                style = MaterialTheme.typography.labelSmall,
-                                color = MaterialTheme.colorScheme.onTertiaryContainer
+                        Text(s.ragModeLabel, style = MaterialTheme.typography.labelSmall)
+                        RagMode.entries.forEach { mode ->
+                            FilterChip(
+                                selected = chatState.ragMode == mode,
+                                onClick = { chatState.ragMode = mode },
+                                label = { Text(mode.label, style = MaterialTheme.typography.labelSmall) }
                             )
-                            Text(
-                                chatState.lastRagSources,
-                                style = MaterialTheme.typography.bodySmall,
-                                color = MaterialTheme.colorScheme.onTertiaryContainer
-                            )
+                        }
+                    }
+
+                    if (chatState.lastRagSources.isNotBlank()) {
+                        Surface(
+                            color = MaterialTheme.colorScheme.tertiaryContainer,
+                            shape = MaterialTheme.shapes.small,
+                            modifier = Modifier.fillMaxWidth().padding(top = 4.dp)
+                        ) {
+                            Column(modifier = Modifier.padding(8.dp)) {
+                                Text(
+                                    s.ragSourcesLabel,
+                                    style = MaterialTheme.typography.labelSmall,
+                                    color = MaterialTheme.colorScheme.onTertiaryContainer
+                                )
+                                Text(
+                                    chatState.lastRagSources,
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = MaterialTheme.colorScheme.onTertiaryContainer
+                                )
+                            }
                         }
                     }
                 }

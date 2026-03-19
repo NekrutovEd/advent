@@ -2,8 +2,10 @@ package indexing
 
 import org.junit.jupiter.api.Test
 import state.RagChunk
+import state.RagMode
 import state.RagResult
 import kotlin.test.assertEquals
+import kotlin.test.assertFalse
 import kotlin.test.assertTrue
 
 class RagEngineTest {
@@ -48,8 +50,56 @@ class RagEngineTest {
     }
 
     @Test
+    fun `buildContext includes pipeline metadata when present`() {
+        val engine = RagEngine(apiKey = "test-key")
+        val result = RagResult(
+            chunks = listOf(
+                RagChunk("Some text", "doc.md", "intro", 0.8f)
+            ),
+            candidateCount = 15,
+            effectiveQuery = "expanded query terms"
+        )
+
+        val context = engine.buildContext(result)
+        assertTrue(context.contains("1 results selected from 15 candidates"))
+        assertTrue(context.contains("Effective query: expanded query terms"))
+    }
+
+    @Test
+    fun `buildContext omits pipeline metadata when not set`() {
+        val engine = RagEngine(apiKey = "test-key")
+        val result = RagResult(
+            chunks = listOf(
+                RagChunk("Some text", "doc.md", "intro", 0.8f)
+            )
+        )
+
+        val context = engine.buildContext(result)
+        assertFalse(context.contains("Pipeline:"))
+        assertFalse(context.contains("Effective query:"))
+    }
+
+    @Test
     fun `isReady returns false when no index loaded`() {
         val engine = RagEngine(apiKey = "test-key")
         assertEquals(false, engine.isReady)
     }
+
+    @Test
+    fun `default config is accessible`() {
+        val engine = RagEngine(apiKey = "test-key")
+        val config = engine.config
+        assertEquals(15, config.fetchTopK)
+        assertEquals(5, config.finalTopK)
+        assertEquals(RagMode.RERANKED, config.mode)
+    }
+
+    @Test
+    fun `config is mutable`() {
+        val engine = RagEngine(apiKey = "test-key")
+        engine.config = RagConfig(fetchTopK = 20, finalTopK = 10)
+        assertEquals(20, engine.config.fetchTopK)
+        assertEquals(10, engine.config.finalTopK)
+    }
+
 }
