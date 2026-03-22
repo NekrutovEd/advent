@@ -80,6 +80,12 @@ class ChatState(
     var ragMode by mutableStateOf(RagMode.RERANKED)
     var lastRagSources by mutableStateOf("")
 
+    // Task memory (Day 25) — accumulated conversation context
+    val taskMemory = TaskMemory()
+    var lastCitationResult by mutableStateOf<CitationResult?>(null)
+    /** Last RAG chunks used — needed for citation validation. */
+    var lastRagChunks: List<RagChunk> = emptyList()
+
     private val history = mutableListOf<ChatMessage>()
 
     fun historySnapshot(): List<ChatMessage> = history.toList()
@@ -346,8 +352,9 @@ class ChatState(
 
         // Prepend memory and task state as system messages in snapshot
         val taskContext = if (taskTracking) taskTracker.toContextString(lang) else ""
+        val taskMemoryContext = if (taskTracking) taskMemory.toPromptContext() else ""
         val hasTools = mcpTools?.isNotEmpty() == true
-        val memoryPreamble = buildMemoryPreamble(profileText, longTermMemoryText, workingMemoryText, taskContext, invariantsText, schedulerChatId, schedulerSessionId, hasTools, ragContextText)
+        val memoryPreamble = buildMemoryPreamble(profileText, longTermMemoryText, workingMemoryText, taskContext, invariantsText, schedulerChatId, schedulerSessionId, hasTools, ragContextText, taskMemoryContext)
         val snapshotWithMemory = memoryPreamble + snapshotHistory
 
         val snapshot = try {
@@ -377,7 +384,7 @@ class ChatState(
                 connectTimeoutSec, readTimeoutSec, stop, responseFormat, jsonSchema,
                 baseUrl, profileText, longTermMemoryText, workingMemoryText,
                 taskContext, invariantsText, effectiveTools,
-                schedulerChatId, schedulerSessionId, ragContextText
+                schedulerChatId, schedulerSessionId, ragContextText, taskMemoryContext
             )
             accumulateUsage(response)
 
@@ -425,7 +432,15 @@ class ChatState(
             } else null
 
             val ragSourcesForMessage = if (ragContextText.isNotBlank()) lastRagSources.takeIf { it.isNotBlank() } else null
-            val assistantMessage = ChatMessage("assistant", response.content, invariantViolation = violation, ragSources = ragSourcesForMessage)
+
+            // Citation validation (Day 25)
+            val citationResult = if (ragContextText.isNotBlank() && lastRagChunks.isNotEmpty()) {
+                val result = CitationValidator.validate(response.content, lastRagChunks)
+                lastCitationResult = result
+                result
+            } else null
+
+            val assistantMessage = ChatMessage("assistant", response.content, invariantViolation = violation, ragSources = ragSourcesForMessage, citationResult = citationResult)
             history.add(ChatMessage("assistant", response.content))
             messages.add(assistantMessage)
 
@@ -442,6 +457,9 @@ class ChatState(
 
             // Extract task state after successful response
             extractTaskStateIfNeeded(apiKey, model, temperature, connectTimeoutSec, readTimeoutSec, baseUrl, lang)
+
+            // Extract task memory after successful response (Day 25)
+            extractTaskMemoryIfNeeded(apiKey, model, temperature, connectTimeoutSec, readTimeoutSec, baseUrl, lang)
         } catch (e: Exception) {
             error = e.message ?: "Unknown error"
             if (history.isNotEmpty()) history.removeLast()
@@ -459,7 +477,7 @@ class ChatState(
         workingMemoryText: String, taskContext: String, invariantsText: String,
         tools: List<McpTool>?,
         schedulerChatId: String = "", schedulerSessionId: String = "",
-        ragContextText: String = ""
+        ragContextText: String = "", taskMemoryContext: String = ""
     ): ChatResponse {
         val fullHistory = if (sendHistory) history.toList() else listOf(history.last())
         val windowedHistory = if (sendHistory) applySlidingWindow(fullHistory) else fullHistory
@@ -467,7 +485,7 @@ class ChatState(
         val cleanHistory = if (tools == null) {
             windowedHistory.filter { it.role != "tool" && it.toolCalls == null }
         } else windowedHistory
-        val apiHistory = buildMemoryPreamble(profileText, longTermMemoryText, workingMemoryText, taskContext, invariantsText, schedulerChatId, schedulerSessionId, hasTools = tools != null, ragContextText = ragContextText) + cleanHistory
+        val apiHistory = buildMemoryPreamble(profileText, longTermMemoryText, workingMemoryText, taskContext, invariantsText, schedulerChatId, schedulerSessionId, hasTools = tools != null, ragContextText = ragContextText, taskMemoryContext = taskMemoryContext) + cleanHistory
 
         return chatApi.sendMessage(
             history = apiHistory,
@@ -581,11 +599,43 @@ class ChatState(
         }
     }
 
+    private suspend fun extractTaskMemoryIfNeeded(
+        apiKey: String,
+        model: String,
+        temperature: Double?,
+        connectTimeoutSec: Int?,
+        readTimeoutSec: Int?,
+        baseUrl: String? = null,
+        lang: Lang = Lang.EN
+    ) {
+        if (!taskTracking) return
+        val conversational = history.filter { it.role == "user" || it.role == "assistant" }
+        if (conversational.size < 2) return
+
+        taskMemory.isExtracting = true
+        try {
+            val extracted = TaskMemory.extractFromConversation(
+                chatApi, conversational, taskMemory, apiKey, model, temperature,
+                connectTimeoutSec, readTimeoutSec, baseUrl, lang
+            ) ?: return
+
+            if (extracted.goal != null) {
+                taskMemory.goal = extracted.goal
+            }
+            extracted.newClarifications.forEach { if (it.isNotBlank()) taskMemory.clarifications.add(it) }
+            extracted.newConstraints.forEach { if (it.isNotBlank()) taskMemory.constraints.add(it) }
+            extracted.newCovered.forEach { if (it.isNotBlank()) taskMemory.coveredTopics.add(it) }
+        } finally {
+            taskMemory.isExtracting = false
+        }
+    }
+
     private fun buildMemoryPreamble(
         profileText: String, longTermMemoryText: String, workingMemoryText: String,
         taskContext: String = "", invariantsText: String = "",
         schedulerChatId: String = "", schedulerSessionId: String = "",
-        hasTools: Boolean = false, ragContextText: String = ""
+        hasTools: Boolean = false, ragContextText: String = "",
+        taskMemoryContext: String = ""
     ): List<ChatMessage> {
         return buildList {
             if (hasTools) {
@@ -613,6 +663,9 @@ class ChatState(
             if (taskContext.isNotBlank()) {
                 add(ChatMessage("system", taskContext))
             }
+            if (taskMemoryContext.isNotBlank()) {
+                add(ChatMessage("system", taskMemoryContext))
+            }
             if (ragContextText.isNotBlank()) {
                 add(ChatMessage("system", ragContextText))
             }
@@ -636,6 +689,9 @@ class ChatState(
         isExtractingMemory = false
         isCheckingInvariants = false
         taskTracker.reset()
+        taskMemory.reset()
         lastRagSources = ""
+        lastRagChunks = emptyList()
+        lastCitationResult = null
     }
 }

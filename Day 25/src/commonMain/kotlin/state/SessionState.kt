@@ -84,6 +84,11 @@ class SessionState(
         clone.taskTracker.taskDescription = source.taskTracker.taskDescription
         clone.ragEnabled = source.ragEnabled
         clone.ragMode = source.ragMode
+        // Copy task memory
+        clone.taskMemory.goal = source.taskMemory.goal
+        clone.taskMemory.clarifications.addAll(source.taskMemory.clarifications)
+        clone.taskMemory.constraints.addAll(source.taskMemory.constraints)
+        clone.taskMemory.coveredTopics.addAll(source.taskMemory.coveredTopics)
         clone.stopWords.clear()
         clone.stopWords.addAll(source.stopWords)
         clone.visibleOptions = source.visibleOptions
@@ -134,7 +139,13 @@ class SessionState(
                 // RAG: search for relevant context if enabled for this chat
                 val ragContext = if (chat.ragEnabled && ragProvider != null && ragProvider.isReady) {
                     try {
-                        val ragResult = ragProvider.search(prompt, chat.ragMode)
+                        // Day 25: conversation-aware query enrichment
+                        val enrichedQuery = ConversationAwareQuery.build(
+                            prompt, chat.taskMemory, chat.historySnapshot()
+                        )
+                        val ragResult = ragProvider.search(enrichedQuery, chat.ragMode)
+                        // Store chunks for citation validation
+                        chat.lastRagChunks = ragResult.chunks
                         if (ragResult.lowConfidence || ragResult.chunks.isEmpty()) {
                             chat.lastRagSources = "Low confidence — no relevant sources found\nMode: ${chat.ragMode.label}"
                         } else if (ragResult.chunks.isNotEmpty()) {
@@ -207,7 +218,13 @@ class SessionState(
             // RAG: search for relevant context if enabled for this chat
             val ragContext = if (chat.ragEnabled && ragProvider != null && ragProvider.isReady) {
                 try {
-                    val ragResult = ragProvider.search(prompt, chat.ragMode)
+                    // Day 25: conversation-aware query enrichment
+                    val enrichedQuery = ConversationAwareQuery.build(
+                        prompt, chat.taskMemory, chat.historySnapshot()
+                    )
+                    val ragResult = ragProvider.search(enrichedQuery, chat.ragMode)
+                    // Store chunks for citation validation
+                    chat.lastRagChunks = ragResult.chunks
                     if (ragResult.lowConfidence || ragResult.chunks.isEmpty()) {
                         chat.lastRagSources = "Low confidence — no relevant sources found\nMode: ${chat.ragMode.label}"
                     } else if (ragResult.chunks.isNotEmpty()) {

@@ -108,6 +108,11 @@ object RuStrings : Strings {
     override val taskPausedBanner = "Задача приостановлена. Отправьте сообщение для продолжения."
     override fun taskTransitionBlocked(from: String, to: String) =
         "Переход заблокирован: $from → $to. Пропуск фаз запрещён."
+    override val taskMemoryLabel = "Память задачи"
+    override val taskMemoryGoal = "Цель"
+    override val taskMemoryClarifications = "Установлено"
+    override val taskMemoryConstraints = "Ограничения"
+    override val taskMemoryCovered = "Покрыто"
 
     // Invariants
     override val invariantsTab = "Инварианты"

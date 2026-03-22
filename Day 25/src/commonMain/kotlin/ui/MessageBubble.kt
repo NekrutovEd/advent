@@ -116,6 +116,30 @@ fun MessageBubble(message: ChatMessage) {
                     )
                 }
 
+                // Citation validation badge (Day 25)
+                if (!isUser && message.citationResult != null) {
+                    val cr = message.citationResult
+                    val badgeColor = when {
+                        cr.groundingScore >= 0.8f -> MaterialTheme.colorScheme.primary
+                        cr.groundingScore >= 0.4f -> MaterialTheme.colorScheme.tertiary
+                        cr.hasCitations -> MaterialTheme.colorScheme.error
+                        else -> MaterialTheme.colorScheme.outline
+                    }
+                    val bgAlpha = if (cr.groundingScore >= 0.8f) 0.15f else 0.1f
+                    Surface(
+                        color = badgeColor.copy(alpha = bgAlpha),
+                        shape = RoundedCornerShape(6.dp),
+                        modifier = Modifier.padding(horizontal = 8.dp, vertical = 2.dp)
+                    ) {
+                        Text(
+                            text = cr.summaryText(),
+                            style = MaterialTheme.typography.labelSmall,
+                            color = badgeColor,
+                            modifier = Modifier.padding(horizontal = 8.dp, vertical = 3.dp)
+                        )
+                    }
+                }
+
                 // RAG sources banner
                 if (!isUser && message.ragSources != null) {
                     var ragExpanded by remember { mutableStateOf(false) }

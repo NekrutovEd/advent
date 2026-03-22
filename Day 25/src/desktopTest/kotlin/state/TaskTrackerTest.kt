@@ -255,6 +255,8 @@ class TaskTrackerTest {
         // Then enqueue the task extraction response
         val taskJson = """{"phase":"planning","task_description":"Design API","steps":["Gather requirements","Design endpoints"],"current_step":0,"completed_steps":[]}"""
         enqueueSuccess(taskJson)
+        // Task memory extraction response (Day 25)
+        enqueueSuccess("""{"goal":null,"new_clarifications":[],"new_constraints":[],"new_covered":[]}""")
 
         val chat = appState.activeSession.chats[0]
         chat.taskTracking = true
@@ -272,6 +274,8 @@ class TaskTrackerTest {
             "write comprehensive unit tests, and set up the CI pipeline. Let me start with the user authentication module and then move on to the data layer.")
         val taskJson = """{"phase":"execution","task_description":"Build API","steps":["Design","Implement"],"current_step":1,"completed_steps":[0]}"""
         enqueueSuccess(taskJson)
+        // Task memory extraction response (Day 25)
+        enqueueSuccess("""{"goal":null,"new_clarifications":[],"new_constraints":[],"new_covered":[]}""")
 
         val chat = appState.activeSession.chats[0]
         chat.taskTracking = true
@@ -282,8 +286,8 @@ class TaskTrackerTest {
 
         // isPaused should be auto-cleared
         assertFalse(chat.taskTracker.isPaused)
-        // Extraction should have run (2 requests: main + extraction)
-        assertEquals(2, server.requestCount)
+        // Extraction should have run (3 requests: main + task state + task memory)
+        assertEquals(3, server.requestCount)
         assertEquals(TaskPhase.EXECUTION, chat.taskTracker.phase)
     }
 
@@ -559,6 +563,8 @@ class TaskTrackerTest {
         // Extraction tries to jump IDLE → EXECUTION (illegal: skips PLANNING)
         val taskJson = """{"phase":"execution","task_description":"Build API","steps":["Write code"],"current_step":0,"completed_steps":[]}"""
         enqueueSuccess(taskJson)
+        // Task memory extraction response (Day 25)
+        enqueueSuccess("""{"goal":null,"new_clarifications":[],"new_constraints":[],"new_covered":[]}""")
 
         val chat = appState.activeSession.chats[0]
         chat.taskTracking = true
@@ -580,6 +586,8 @@ class TaskTrackerTest {
             "implement the endpoints, write tests, and deploy. Here's my detailed approach for each of these steps and the rationale behind each decision.")
         val taskJson = """{"phase":"planning","task_description":"Plan API","steps":["Research","Design"],"current_step":0,"completed_steps":[]}"""
         enqueueSuccess(taskJson)
+        // Task memory extraction response (Day 25)
+        enqueueSuccess("""{"goal":null,"new_clarifications":[],"new_constraints":[],"new_covered":[]}""")
 
         val chat = appState.activeSession.chats[0]
         chat.taskTracking = true

@@ -26,6 +26,14 @@ data class TaskTrackerDto(
 )
 
 @Serializable
+data class TaskMemoryDto(
+    val goal: String? = null,
+    val clarifications: List<String> = emptyList(),
+    val constraints: List<String> = emptyList(),
+    val coveredTopics: List<String> = emptyList()
+)
+
+@Serializable
 data class ChatStateDto(
     val id: String,
     val constraints: String,
@@ -49,6 +57,7 @@ data class ChatStateDto(
     val taskTracker: TaskTrackerDto = TaskTrackerDto(),
     val ragEnabled: Boolean = false,
     val ragMode: String = "RERANKED",
+    val taskMemory: TaskMemoryDto = TaskMemoryDto(),
     val visibleOptions: List<String>,
     val messages: List<ChatMessageDto>,
     val history: List<ChatMessageDto>

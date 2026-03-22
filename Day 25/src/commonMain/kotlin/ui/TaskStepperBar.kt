@@ -4,6 +4,7 @@ import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.expandVertically
 import androidx.compose.animation.shrinkVertically
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -17,12 +18,14 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import i18n.LocalStrings
+import state.TaskMemory
 import state.TaskPhase
 import state.TaskTracker
 
 @Composable
 fun TaskStepperBar(
     taskTracker: TaskTracker,
+    taskMemory: TaskMemory? = null,
     modifier: Modifier = Modifier
 ) {
     val s = LocalStrings.current
@@ -234,6 +237,95 @@ fun TaskStepperBar(
                     color = colorScheme.error,
                     modifier = Modifier.padding(horizontal = 8.dp, vertical = 2.dp)
                 )
+            }
+        }
+
+        // Task memory section (Day 25)
+        if (taskMemory != null) {
+            val hasMemory = taskMemory.goal != null ||
+                taskMemory.clarifications.isNotEmpty() ||
+                taskMemory.constraints.isNotEmpty() ||
+                taskMemory.coveredTopics.isNotEmpty()
+
+            if (hasMemory || taskMemory.isExtracting) {
+                var memoryExpanded by remember { mutableStateOf(false) }
+                Surface(
+                    color = colorScheme.tertiaryContainer.copy(alpha = 0.3f),
+                    shape = RoundedCornerShape(4.dp),
+                    modifier = Modifier.fillMaxWidth().padding(top = 2.dp)
+                ) {
+                    Column(modifier = Modifier.padding(horizontal = 8.dp, vertical = 2.dp)) {
+                        Row(
+                            modifier = Modifier.fillMaxWidth()
+                                .let { if (hasMemory) it.clickable { memoryExpanded = !memoryExpanded } else it },
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.SpaceBetween
+                        ) {
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                Text(
+                                    text = s.taskMemoryLabel,
+                                    style = MaterialTheme.typography.labelSmall,
+                                    color = colorScheme.onTertiaryContainer
+                                )
+                                if (taskMemory.isExtracting) {
+                                    Spacer(Modifier.width(4.dp))
+                                    Text(
+                                        text = s.taskExtracting,
+                                        style = MaterialTheme.typography.labelSmall,
+                                        color = colorScheme.outline
+                                    )
+                                }
+                            }
+                            if (hasMemory) {
+                                Text(
+                                    text = if (memoryExpanded) "\u25B4" else "\u25BE",
+                                    style = MaterialTheme.typography.labelSmall,
+                                    color = colorScheme.onTertiaryContainer
+                                )
+                            }
+                        }
+                        AnimatedVisibility(visible = memoryExpanded && hasMemory) {
+                            Column(modifier = Modifier.padding(top = 2.dp)) {
+                                if (taskMemory.goal != null) {
+                                    Text(
+                                        text = "${s.taskMemoryGoal}: ${taskMemory.goal}",
+                                        style = MaterialTheme.typography.labelSmall,
+                                        color = colorScheme.primary,
+                                        maxLines = 2,
+                                        overflow = TextOverflow.Ellipsis
+                                    )
+                                }
+                                if (taskMemory.clarifications.isNotEmpty()) {
+                                    Text(
+                                        text = "${s.taskMemoryClarifications}: ${taskMemory.clarifications.joinToString("; ")}",
+                                        style = MaterialTheme.typography.labelSmall,
+                                        color = colorScheme.onTertiaryContainer,
+                                        maxLines = 3,
+                                        overflow = TextOverflow.Ellipsis
+                                    )
+                                }
+                                if (taskMemory.constraints.isNotEmpty()) {
+                                    Text(
+                                        text = "${s.taskMemoryConstraints}: ${taskMemory.constraints.joinToString("; ")}",
+                                        style = MaterialTheme.typography.labelSmall,
+                                        color = colorScheme.onTertiaryContainer,
+                                        maxLines = 2,
+                                        overflow = TextOverflow.Ellipsis
+                                    )
+                                }
+                                if (taskMemory.coveredTopics.isNotEmpty()) {
+                                    Text(
+                                        text = "${s.taskMemoryCovered}: ${taskMemory.coveredTopics.joinToString("; ")}",
+                                        style = MaterialTheme.typography.labelSmall,
+                                        color = colorScheme.outline,
+                                        maxLines = 2,
+                                        overflow = TextOverflow.Ellipsis
+                                    )
+                                }
+                            }
+                        }
+                    }
+                }
             }
         }
     }

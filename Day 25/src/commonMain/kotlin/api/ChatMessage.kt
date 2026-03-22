@@ -15,5 +15,7 @@ data class ChatMessage(
     val toolCalls: List<ToolCall>? = null,
     val toolCallId: String? = null,
     // RAG sources used for this response
-    val ragSources: String? = null
+    val ragSources: String? = null,
+    // Citation validation result (Day 25)
+    val citationResult: state.CitationResult? = null
 )

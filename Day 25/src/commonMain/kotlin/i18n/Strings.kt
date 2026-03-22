@@ -107,6 +107,11 @@ interface Strings {
 
     val taskPausedBanner: String
     fun taskTransitionBlocked(from: String, to: String): String
+    val taskMemoryLabel: String
+    val taskMemoryGoal: String
+    val taskMemoryClarifications: String
+    val taskMemoryConstraints: String
+    val taskMemoryCovered: String
 
     // Invariants
     val invariantsTab: String

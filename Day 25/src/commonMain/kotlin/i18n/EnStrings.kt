@@ -108,6 +108,11 @@ object EnStrings : Strings {
     override val taskPausedBanner = "Task paused. Send a message to resume."
     override fun taskTransitionBlocked(from: String, to: String) =
         "Transition blocked: $from → $to. Phase skipping is not allowed."
+    override val taskMemoryLabel = "Task Memory"
+    override val taskMemoryGoal = "Goal"
+    override val taskMemoryClarifications = "Established"
+    override val taskMemoryConstraints = "Constraints"
+    override val taskMemoryCovered = "Covered"
 
     // Invariants
     override val invariantsTab = "Invariants"

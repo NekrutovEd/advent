@@ -157,6 +157,12 @@ object SessionSerializer {
                         currentStepIndex = chat.taskTracker.currentStepIndex,
                         taskDescription = chat.taskTracker.taskDescription
                     ),
+                    taskMemory = TaskMemoryDto(
+                        goal = chat.taskMemory.goal,
+                        clarifications = chat.taskMemory.clarifications.toList(),
+                        constraints = chat.taskMemory.constraints.toList(),
+                        coveredTopics = chat.taskMemory.coveredTopics.toList()
+                    ),
                     visibleOptions = chat.visibleOptions.map { it.name },
                     messages = chat.messages.map { ChatMessageDto(it.role, it.content) },
                     history = chat.historySnapshot().map { ChatMessageDto(it.role, it.content) }
@@ -201,6 +207,12 @@ object SessionSerializer {
             chat.taskTracker.steps.addAll(tt.steps.map { TaskStep(it.description, it.completed) })
             chat.taskTracker.currentStepIndex = tt.currentStepIndex
             chat.taskTracker.taskDescription = tt.taskDescription
+            // Restore task memory (Day 25)
+            val tm = chatDto.taskMemory
+            chat.taskMemory.goal = tm.goal
+            chat.taskMemory.clarifications.addAll(tm.clarifications)
+            chat.taskMemory.constraints.addAll(tm.constraints)
+            chat.taskMemory.coveredTopics.addAll(tm.coveredTopics)
             chat.visibleOptions = chatDto.visibleOptions.mapNotNull { name ->
                 // Backward compat: map old HISTORY/SUMMARIZATION to CONTEXT
                 val mapped = when (name) {

@@ -374,7 +374,7 @@ fun ChatPanel(
 
         // Task stepper bar
         if (chatState.taskTracking) {
-            TaskStepperBar(taskTracker = chatState.taskTracker)
+            TaskStepperBar(taskTracker = chatState.taskTracker, taskMemory = chatState.taskMemory)
         }
 
         HorizontalDivider()
