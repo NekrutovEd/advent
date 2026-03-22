@@ -61,6 +61,12 @@ object ConversationAwareQuery {
             }
         }
 
+        // Bilingual boost: add English equivalents for common Russian tech terms
+        val bilingualTerms = extractBilingualTerms(userMessage)
+        if (bilingualTerms.isNotEmpty()) {
+            enrichments.add(bilingualTerms.joinToString(" "))
+        }
+
         if (enrichments.isEmpty()) return userMessage
 
         return "$userMessage ${enrichments.joinToString(" ")}"
@@ -76,6 +82,46 @@ object ConversationAwareQuery {
             .filter { it.length > 2 && it !in STOP_WORDS }
             .toSet()
     }
+
+    /**
+     * Extract English equivalents for Russian tech terms in the query.
+     * Helps when the corpus contains mixed-language documents.
+     */
+    internal fun extractBilingualTerms(text: String): List<String> {
+        val lower = text.lowercase()
+        val terms = mutableListOf<String>()
+        for ((ru, en) in BILINGUAL_MAP) {
+            if (lower.contains(ru) && !lower.contains(en)) {
+                terms.add(en)
+            }
+        }
+        return terms
+    }
+
+    private val BILINGUAL_MAP = listOf(
+        "архитектур" to "architecture",
+        "систем" to "system",
+        "компонент" to "component",
+        "плагин" to "plugin",
+        "приложени" to "application",
+        "сервер" to "server",
+        "подключени" to "connection",
+        "уведомлени" to "notification",
+        "обнаружени" to "discovery",
+        "терминал" to "terminal",
+        "протокол" to "protocol",
+        "оркестр" to "orchestration",
+        "агент" to "agent",
+        "индекс" to "index",
+        "эмбеддинг" to "embedding",
+        "порт" to "port",
+        "пуш" to "push",
+        "вебсокет" to "websocket",
+        "запрос" to "query",
+        "поиск" to "search",
+        "память" to "memory",
+        "чанк" to "chunk"
+    )
 
     private val STOP_WORDS = setOf(
         // English

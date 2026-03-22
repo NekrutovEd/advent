@@ -134,8 +134,8 @@ class RagEngineTest {
     @Test
     fun `confidenceThreshold has reasonable default`() {
         val engine = RagEngine(apiKey = "test-key")
-        assertTrue(engine.confidenceThreshold in 0.1f..0.8f,
-            "Confidence threshold should be between 0.1 and 0.8, got ${engine.confidenceThreshold}")
+        assertTrue(engine.confidenceThreshold in 0.1f..0.5f,
+            "Confidence threshold should be between 0.1 and 0.5, got ${engine.confidenceThreshold}")
     }
 
     // ── 10-question citation validation ─────────────────────────

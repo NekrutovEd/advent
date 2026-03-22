@@ -11,10 +11,10 @@ data class RagConfig(
     val fetchTopK: Int = 15,
     /** How many results to return after reranking/filtering. */
     val finalTopK: Int = 5,
-    /** Minimum cosine similarity to keep a result. */
-    val minScore: Float = 0.3f,
+    /** Minimum cosine similarity to keep a result (low for multilingual corpora). */
+    val minScore: Float = 0.15f,
     /** Minimum combined score after reranking to keep. */
-    val minRerankScore: Float = 0.25f,
+    val minRerankScore: Float = 0.15f,
     /** Weight of cosine similarity in combined score (0..1). */
     val semanticWeight: Float = 0.7f,
     /** Weight of keyword overlap in combined score (0..1). */
@@ -98,8 +98,33 @@ object Reranker {
             }
         }
 
+        // Bilingual expansion: add English terms for Russian tech words
+        val lower = query.lowercase()
+        for ((ru, en) in BILINGUAL_MAP) {
+            if (lower.contains(ru)) parts.add(en)
+        }
+
         return parts.joinToString(" ").lowercase()
     }
+
+    private val BILINGUAL_MAP = listOf(
+        "архитектур" to "architecture components system",
+        "систем" to "system overview",
+        "компонент" to "components",
+        "плагин" to "plugin",
+        "приложени" to "application app",
+        "сервер" to "server",
+        "подключени" to "connection websocket",
+        "уведомлени" to "notification push",
+        "обнаружени" to "discovery mdns",
+        "терминал" to "terminal",
+        "протокол" to "protocol",
+        "оркестр" to "orchestration agent",
+        "агент" to "agent",
+        "порт" to "port",
+        "пуш" to "push notification",
+        "вебсокет" to "websocket",
+    )
 
     // ── Internal helpers ──────────────────────────────────────────
 

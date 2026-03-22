@@ -47,8 +47,9 @@ interface RagProvider {
     /** Search with configurable mode: plain / reranked / full (query rewrite + rerank). */
     suspend fun search(query: String, mode: RagMode): RagResult = search(query)
 
-    /** Confidence threshold: if top chunk score is below this, trigger "I don't know" mode. */
-    val confidenceThreshold: Float get() = 0.4f
+    /** Confidence threshold: if top chunk score is below this, trigger "I don't know" mode.
+     *  Set conservatively low to accommodate multilingual corpora (Russian+English embeddings). */
+    val confidenceThreshold: Float get() = 0.2f
 
     /** Build a context string from RAG results, suitable for injection into the prompt. */
     fun buildContext(result: RagResult): String {
