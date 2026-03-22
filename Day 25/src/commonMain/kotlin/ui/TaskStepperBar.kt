@@ -31,7 +31,14 @@ fun TaskStepperBar(
     val s = LocalStrings.current
     val phase = taskTracker.phase
 
-    if (phase == TaskPhase.IDLE && !taskTracker.isExtracting) return
+    val hasTaskMemory = taskMemory != null && (
+        taskMemory.goal != null ||
+        taskMemory.clarifications.isNotEmpty() ||
+        taskMemory.constraints.isNotEmpty() ||
+        taskMemory.coveredTopics.isNotEmpty() ||
+        taskMemory.isExtracting
+    )
+    if (phase == TaskPhase.IDLE && !taskTracker.isExtracting && !hasTaskMemory) return
 
     val colorScheme = MaterialTheme.colorScheme
 
@@ -40,8 +47,11 @@ fun TaskStepperBar(
             .fillMaxWidth()
             .padding(horizontal = 8.dp, vertical = 4.dp)
     ) {
+        // Only show phase stepper UI when not in IDLE (skip for pure Q&A with task memory only)
+        val showPhaseStepper = phase != TaskPhase.IDLE || taskTracker.isExtracting
+
         // Task description + pause button
-        Row(
+        if (showPhaseStepper) Row(
             modifier = Modifier.fillMaxWidth(),
             verticalAlignment = Alignment.CenterVertically
         ) {
@@ -99,7 +109,7 @@ fun TaskStepperBar(
         }
 
         // Horizontal phase stepper
-        Row(
+        if (showPhaseStepper) Row(
             modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp),
             horizontalArrangement = Arrangement.SpaceBetween,
             verticalAlignment = Alignment.CenterVertically
@@ -133,7 +143,7 @@ fun TaskStepperBar(
         }
 
         // Sub-steps (collapsible detail)
-        AnimatedVisibility(
+        if (showPhaseStepper) AnimatedVisibility(
             visible = taskTracker.steps.isNotEmpty() && phase != TaskPhase.IDLE,
             enter = expandVertically(),
             exit = shrinkVertically()
@@ -198,7 +208,7 @@ fun TaskStepperBar(
 
         // Transition blocked banner
         val rejection = taskTracker.lastRejection
-        if (rejection != null) {
+        if (showPhaseStepper && rejection != null) {
             Surface(
                 color = colorScheme.errorContainer.copy(alpha = 0.5f),
                 shape = RoundedCornerShape(4.dp),
@@ -225,7 +235,7 @@ fun TaskStepperBar(
         }
 
         // Paused banner
-        if (taskTracker.isPaused) {
+        if (showPhaseStepper && taskTracker.isPaused) {
             Surface(
                 color = colorScheme.errorContainer.copy(alpha = 0.3f),
                 shape = RoundedCornerShape(4.dp),
