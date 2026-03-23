@@ -1,5 +1,9 @@
 package ui
 
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.expandVertically
+import androidx.compose.animation.shrinkVertically
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
@@ -37,6 +41,7 @@ fun ChatPanel(
     val s = LocalStrings.current
     val listState = rememberLazyListState()
     var showOptions by remember { mutableStateOf(false) }
+    var optionsExpanded by remember { mutableStateOf(false) }
 
     LaunchedEffect(chatState.messages.size) {
         if (chatState.messages.isNotEmpty()) {
@@ -45,6 +50,7 @@ fun ChatPanel(
     }
 
     Column(modifier = modifier) {
+        // ── Header row ──────────────────────────────────────────
         Row(
             modifier = Modifier.fillMaxWidth().padding(8.dp),
             horizontalArrangement = Arrangement.SpaceBetween,
@@ -103,282 +109,54 @@ fun ChatPanel(
             }
         }
 
-        if (ChatOption.STATISTICS in chatState.visibleOptions) {
-            StatisticsRow(chatState)
-        }
-        if (ChatOption.SYSTEM_PROMPT in chatState.visibleOptions) {
-            ConstraintsField(
-                value = chatState.systemPrompt,
-                onValueChange = { chatState.systemPrompt = it },
-                placeholder = s.systemPromptPerChat
-            )
-        }
-        if (ChatOption.CONSTRAINTS in chatState.visibleOptions) {
-            ConstraintsField(
-                value = chatState.constraints,
-                onValueChange = { chatState.constraints = it },
-                placeholder = s.constraintsPerChat
-            )
-        }
-        if (ChatOption.STOP_WORDS in chatState.visibleOptions) {
-            Row(
-                modifier = Modifier.fillMaxWidth().padding(horizontal = 8.dp, vertical = 4.dp)
-                    .horizontalScroll(rememberScrollState()),
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(4.dp)
+        // ── Collapsible options block ───────────────────────────
+        val hasVisibleOptions = chatState.visibleOptions.isNotEmpty()
+        if (hasVisibleOptions) {
+            Surface(
+                color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.3f),
+                modifier = Modifier.fillMaxWidth()
             ) {
-                chatState.stopWords.forEachIndexed { index, word ->
-                    OutlinedTextField(
-                        value = word,
-                        onValueChange = { chatState.stopWords[index] = it },
-                        placeholder = { Text(s.stopWordPlaceholder(index)) },
-                        singleLine = true,
-                        modifier = Modifier.width(120.dp)
-                    )
-                }
-                if (chatState.stopWords.size < 4) {
-                    TextButton(onClick = { chatState.addStopWord() }) {
-                        Text("+")
-                    }
-                }
-                if (chatState.stopWords.size > 1) {
-                    TextButton(onClick = { chatState.removeStopWord() }) {
-                        Text("\u2212")
-                    }
-                }
-            }
-        }
-        if (ChatOption.MAX_TOKENS in chatState.visibleOptions) {
-            OutlinedTextField(
-                value = chatState.maxTokensOverride,
-                onValueChange = { chatState.maxTokensOverride = it },
-                placeholder = { Text(s.maxTokensOverride) },
-                singleLine = true,
-                modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp).width(200.dp)
-            )
-        }
-        if (ChatOption.RESPONSE_FORMAT in chatState.visibleOptions) {
-            var expanded by remember { mutableStateOf(false) }
-            Column(modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)) {
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    Box {
-                        OutlinedButton(onClick = { expanded = true }) {
-                            Text(chatState.responseFormatType)
-                        }
-                        DropdownMenu(
-                            expanded = expanded,
-                            onDismissRequest = { expanded = false }
-                        ) {
-                            listOf("text", "json_object", "json_schema").forEach { fmt ->
-                                DropdownMenuItem(
-                                    text = { Text(fmt) },
-                                    onClick = {
-                                        chatState.responseFormatType = fmt
-                                        expanded = false
-                                    }
-                                )
-                            }
-                        }
-                    }
-                }
-                if (chatState.responseFormatType == "json_schema") {
-                    OutlinedTextField(
-                        value = chatState.jsonSchema,
-                        onValueChange = { chatState.jsonSchema = it },
-                        placeholder = { Text(s.jsonSchemaPlaceholder) },
-                        modifier = Modifier.fillMaxWidth().heightIn(min = 60.dp),
-                        maxLines = 5
-                    )
-                }
-            }
-        }
-        if (ChatOption.CONTEXT in chatState.visibleOptions) {
-            Column(modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)) {
-                // Send History toggle
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    Switch(
-                        checked = chatState.sendHistory,
-                        onCheckedChange = { chatState.sendHistory = it }
-                    )
-                    Spacer(Modifier.width(8.dp))
-                    Text(s.sendHistory, style = MaterialTheme.typography.bodyMedium)
-                }
-
-                if (chatState.sendHistory) {
-                    // Sliding Window
-                    OutlinedTextField(
-                        value = chatState.slidingWindow,
-                        onValueChange = { if (it.isEmpty() || it.all { c -> c.isDigit() }) chatState.slidingWindow = it },
-                        label = { Text(s.slidingWindowLabel, style = MaterialTheme.typography.labelSmall) },
-                        singleLine = true,
-                        modifier = Modifier.width(220.dp).padding(top = 4.dp)
-                    )
-
-                    // Auto-summarize toggle + threshold/keepLast
+                Column {
                     Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clickable { optionsExpanded = !optionsExpanded }
+                            .padding(horizontal = 12.dp, vertical = 4.dp),
                         verticalAlignment = Alignment.CenterVertically,
-                        modifier = Modifier.padding(top = 4.dp)
+                        horizontalArrangement = Arrangement.SpaceBetween
                     ) {
-                        Switch(
-                            checked = chatState.autoSummarize,
-                            onCheckedChange = { chatState.autoSummarize = it }
+                        Text(
+                            text = "\u2699 ${chatState.visibleOptions.size} options",
+                            style = MaterialTheme.typography.labelSmall,
+                            color = MaterialTheme.colorScheme.outline
                         )
-                        Spacer(Modifier.width(8.dp))
-                        Text(s.autoSummarize, style = MaterialTheme.typography.bodyMedium)
+                        Text(
+                            text = if (optionsExpanded) "\u25B4" else "\u25BE",
+                            style = MaterialTheme.typography.labelSmall,
+                            color = MaterialTheme.colorScheme.outline
+                        )
                     }
-                    if (chatState.autoSummarize) {
-                        Row(
-                            horizontalArrangement = Arrangement.spacedBy(8.dp),
-                            verticalAlignment = Alignment.CenterVertically
-                        ) {
-                            OutlinedTextField(
-                                value = chatState.summarizeThreshold,
-                                onValueChange = { chatState.summarizeThreshold = it },
-                                label = { Text(s.summarizeThresholdLabel, style = MaterialTheme.typography.labelSmall) },
-                                singleLine = true,
-                                modifier = Modifier.width(180.dp)
-                            )
-                            OutlinedTextField(
-                                value = chatState.keepLastMessages,
-                                onValueChange = { chatState.keepLastMessages = it },
-                                label = { Text(s.keepLastLabel, style = MaterialTheme.typography.labelSmall) },
-                                singleLine = true,
-                                modifier = Modifier.width(180.dp)
-                            )
-                        }
-                    }
-                }
-
-                // Summary count label
-                if (chatState.summaryCount > 0) {
-                    Text(
-                        s.summaryCountLabel(chatState.summaryCount),
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.outline
-                    )
-                }
-
-                // Extract Memory toggle
-                Row(
-                    verticalAlignment = Alignment.CenterVertically,
-                    modifier = Modifier.padding(top = 4.dp)
-                ) {
-                    Switch(
-                        checked = chatState.extractMemory,
-                        onCheckedChange = { chatState.extractMemory = it }
-                    )
-                    Spacer(Modifier.width(8.dp))
-                    Text(s.extractMemory, style = MaterialTheme.typography.bodyMedium)
-                }
-
-                // Extracting memory indicator
-                if (chatState.isExtractingMemory) {
-                    Text(
-                        s.extractingMemory,
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.outline,
-                        modifier = Modifier.padding(top = 2.dp)
-                    )
-                }
-            }
-        }
-        if (ChatOption.MODEL in chatState.visibleOptions) {
-            var modelDropdownExpanded by remember { mutableStateOf(false) }
-            val displayModel = chatState.modelOverride ?: globalModel
-            Row(
-                modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                Box {
-                    OutlinedButton(onClick = { modelDropdownExpanded = true }) {
-                        Text(displayModel, style = MaterialTheme.typography.bodySmall)
-                    }
-                    DropdownMenu(
-                        expanded = modelDropdownExpanded,
-                        onDismissRequest = { modelDropdownExpanded = false }
+                    AnimatedVisibility(
+                        visible = optionsExpanded,
+                        enter = expandVertically(),
+                        exit = shrinkVertically()
                     ) {
-                        availableModels.forEach { model ->
-                            DropdownMenuItem(
-                                text = { Text(model) },
-                                trailingIcon = { ModelInfoIcon(model) },
-                                onClick = {
-                                    chatState.modelOverride = model
-                                    modelDropdownExpanded = false
-                                }
-                            )
+                        Column {
+                            OptionsContent(chatState, s, availableModels, globalModel)
                         }
                     }
                 }
             }
         }
-        if (ChatOption.TASK_TRACKING in chatState.visibleOptions) {
-            Column(modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)) {
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    Switch(
-                        checked = chatState.taskTracking,
-                        onCheckedChange = { chatState.taskTracking = it }
-                    )
-                    Spacer(Modifier.width(8.dp))
-                    Text(s.taskTrackingLabel, style = MaterialTheme.typography.bodyMedium)
-                }
-            }
-        }
-        if (ChatOption.RAG in chatState.visibleOptions) {
-            Column(modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)) {
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    Switch(
-                        checked = chatState.ragEnabled,
-                        onCheckedChange = { chatState.ragEnabled = it }
-                    )
-                    Spacer(Modifier.width(8.dp))
-                    Text(
-                        if (chatState.ragEnabled) s.ragEnabled else s.ragDisabled,
-                        style = MaterialTheme.typography.bodyMedium
-                    )
-                }
-                if (chatState.ragEnabled) {
-                    // RAG mode selector
-                    Row(
-                        modifier = Modifier.padding(top = 4.dp),
-                        horizontalArrangement = Arrangement.spacedBy(4.dp),
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        Text(s.ragModeLabel, style = MaterialTheme.typography.labelSmall)
-                        RagMode.entries.forEach { mode ->
-                            FilterChip(
-                                selected = chatState.ragMode == mode,
-                                onClick = { chatState.ragMode = mode },
-                                label = { Text(mode.label, style = MaterialTheme.typography.labelSmall) }
-                            )
-                        }
-                    }
 
-                }
-            }
-        }
-        if (ChatOption.TEMPERATURE in chatState.visibleOptions) {
-            val tempValue = chatState.temperatureOverride ?: 1.0f
-            Column(modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)) {
-                Text(
-                    s.temperatureValue("%.1f".format(tempValue)),
-                    style = MaterialTheme.typography.bodyMedium
-                )
-                Slider(
-                    value = tempValue,
-                    onValueChange = { chatState.temperatureOverride = it },
-                    valueRange = 0f..2f,
-                    steps = 19
-                )
-            }
-        }
-
-        // Task stepper bar
+        // ── Task Memory (separate, always visible when has data) ─
         if (chatState.taskTracking) {
             TaskStepperBar(taskTracker = chatState.taskTracker, taskMemory = chatState.taskMemory)
         }
 
         HorizontalDivider()
 
+        // ── Messages ────────────────────────────────────────────
         Box(modifier = Modifier.weight(1f).fillMaxWidth()) {
             LazyColumn(
                 state = listState,
@@ -422,6 +200,273 @@ fun ChatPanel(
                     modifier = Modifier.padding(8.dp)
                 )
             }
+        }
+    }
+}
+
+/**
+ * All option panels extracted into a separate composable for collapsibility.
+ */
+@Composable
+private fun OptionsContent(
+    chatState: ChatState,
+    s: i18n.Strings,
+    availableModels: List<String>,
+    globalModel: String
+) {
+    if (ChatOption.STATISTICS in chatState.visibleOptions) {
+        StatisticsRow(chatState)
+    }
+    if (ChatOption.SYSTEM_PROMPT in chatState.visibleOptions) {
+        ConstraintsField(
+            value = chatState.systemPrompt,
+            onValueChange = { chatState.systemPrompt = it },
+            placeholder = s.systemPromptPerChat
+        )
+    }
+    if (ChatOption.CONSTRAINTS in chatState.visibleOptions) {
+        ConstraintsField(
+            value = chatState.constraints,
+            onValueChange = { chatState.constraints = it },
+            placeholder = s.constraintsPerChat
+        )
+    }
+    if (ChatOption.STOP_WORDS in chatState.visibleOptions) {
+        Row(
+            modifier = Modifier.fillMaxWidth().padding(horizontal = 8.dp, vertical = 4.dp)
+                .horizontalScroll(rememberScrollState()),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(4.dp)
+        ) {
+            chatState.stopWords.forEachIndexed { index, word ->
+                OutlinedTextField(
+                    value = word,
+                    onValueChange = { chatState.stopWords[index] = it },
+                    placeholder = { Text(s.stopWordPlaceholder(index)) },
+                    singleLine = true,
+                    modifier = Modifier.width(120.dp)
+                )
+            }
+            if (chatState.stopWords.size < 4) {
+                TextButton(onClick = { chatState.addStopWord() }) {
+                    Text("+")
+                }
+            }
+            if (chatState.stopWords.size > 1) {
+                TextButton(onClick = { chatState.removeStopWord() }) {
+                    Text("\u2212")
+                }
+            }
+        }
+    }
+    if (ChatOption.MAX_TOKENS in chatState.visibleOptions) {
+        OutlinedTextField(
+            value = chatState.maxTokensOverride,
+            onValueChange = { chatState.maxTokensOverride = it },
+            placeholder = { Text(s.maxTokensOverride) },
+            singleLine = true,
+            modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp).width(200.dp)
+        )
+    }
+    if (ChatOption.RESPONSE_FORMAT in chatState.visibleOptions) {
+        var expanded by remember { mutableStateOf(false) }
+        Column(modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Box {
+                    OutlinedButton(onClick = { expanded = true }) {
+                        Text(chatState.responseFormatType)
+                    }
+                    DropdownMenu(
+                        expanded = expanded,
+                        onDismissRequest = { expanded = false }
+                    ) {
+                        listOf("text", "json_object", "json_schema").forEach { fmt ->
+                            DropdownMenuItem(
+                                text = { Text(fmt) },
+                                onClick = {
+                                    chatState.responseFormatType = fmt
+                                    expanded = false
+                                }
+                            )
+                        }
+                    }
+                }
+            }
+            if (chatState.responseFormatType == "json_schema") {
+                OutlinedTextField(
+                    value = chatState.jsonSchema,
+                    onValueChange = { chatState.jsonSchema = it },
+                    placeholder = { Text(s.jsonSchemaPlaceholder) },
+                    modifier = Modifier.fillMaxWidth().heightIn(min = 60.dp),
+                    maxLines = 5
+                )
+            }
+        }
+    }
+    if (ChatOption.CONTEXT in chatState.visibleOptions) {
+        Column(modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Switch(
+                    checked = chatState.sendHistory,
+                    onCheckedChange = { chatState.sendHistory = it }
+                )
+                Spacer(Modifier.width(8.dp))
+                Text(s.sendHistory, style = MaterialTheme.typography.bodyMedium)
+            }
+            if (chatState.sendHistory) {
+                OutlinedTextField(
+                    value = chatState.slidingWindow,
+                    onValueChange = { if (it.isEmpty() || it.all { c -> c.isDigit() }) chatState.slidingWindow = it },
+                    label = { Text(s.slidingWindowLabel, style = MaterialTheme.typography.labelSmall) },
+                    singleLine = true,
+                    modifier = Modifier.width(220.dp).padding(top = 4.dp)
+                )
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    modifier = Modifier.padding(top = 4.dp)
+                ) {
+                    Switch(
+                        checked = chatState.autoSummarize,
+                        onCheckedChange = { chatState.autoSummarize = it }
+                    )
+                    Spacer(Modifier.width(8.dp))
+                    Text(s.autoSummarize, style = MaterialTheme.typography.bodyMedium)
+                }
+                if (chatState.autoSummarize) {
+                    Row(
+                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        OutlinedTextField(
+                            value = chatState.summarizeThreshold,
+                            onValueChange = { chatState.summarizeThreshold = it },
+                            label = { Text(s.summarizeThresholdLabel, style = MaterialTheme.typography.labelSmall) },
+                            singleLine = true,
+                            modifier = Modifier.width(180.dp)
+                        )
+                        OutlinedTextField(
+                            value = chatState.keepLastMessages,
+                            onValueChange = { chatState.keepLastMessages = it },
+                            label = { Text(s.keepLastLabel, style = MaterialTheme.typography.labelSmall) },
+                            singleLine = true,
+                            modifier = Modifier.width(180.dp)
+                        )
+                    }
+                }
+            }
+            if (chatState.summaryCount > 0) {
+                Text(
+                    s.summaryCountLabel(chatState.summaryCount),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.outline
+                )
+            }
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                modifier = Modifier.padding(top = 4.dp)
+            ) {
+                Switch(
+                    checked = chatState.extractMemory,
+                    onCheckedChange = { chatState.extractMemory = it }
+                )
+                Spacer(Modifier.width(8.dp))
+                Text(s.extractMemory, style = MaterialTheme.typography.bodyMedium)
+            }
+            if (chatState.isExtractingMemory) {
+                Text(
+                    s.extractingMemory,
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.outline,
+                    modifier = Modifier.padding(top = 2.dp)
+                )
+            }
+        }
+    }
+    if (ChatOption.MODEL in chatState.visibleOptions) {
+        var modelDropdownExpanded by remember { mutableStateOf(false) }
+        val displayModel = chatState.modelOverride ?: globalModel
+        Row(
+            modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Box {
+                OutlinedButton(onClick = { modelDropdownExpanded = true }) {
+                    Text(displayModel, style = MaterialTheme.typography.bodySmall)
+                }
+                DropdownMenu(
+                    expanded = modelDropdownExpanded,
+                    onDismissRequest = { modelDropdownExpanded = false }
+                ) {
+                    availableModels.forEach { model ->
+                        DropdownMenuItem(
+                            text = { Text(model) },
+                            trailingIcon = { ModelInfoIcon(model) },
+                            onClick = {
+                                chatState.modelOverride = model
+                                modelDropdownExpanded = false
+                            }
+                        )
+                    }
+                }
+            }
+        }
+    }
+    if (ChatOption.TASK_TRACKING in chatState.visibleOptions) {
+        Column(modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Switch(
+                    checked = chatState.taskTracking,
+                    onCheckedChange = { chatState.taskTracking = it }
+                )
+                Spacer(Modifier.width(8.dp))
+                Text(s.taskTrackingLabel, style = MaterialTheme.typography.bodyMedium)
+            }
+        }
+    }
+    if (ChatOption.RAG in chatState.visibleOptions) {
+        Column(modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Switch(
+                    checked = chatState.ragEnabled,
+                    onCheckedChange = { chatState.ragEnabled = it }
+                )
+                Spacer(Modifier.width(8.dp))
+                Text(
+                    if (chatState.ragEnabled) s.ragEnabled else s.ragDisabled,
+                    style = MaterialTheme.typography.bodyMedium
+                )
+            }
+            if (chatState.ragEnabled) {
+                Row(
+                    modifier = Modifier.padding(top = 4.dp),
+                    horizontalArrangement = Arrangement.spacedBy(4.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Text(s.ragModeLabel, style = MaterialTheme.typography.labelSmall)
+                    RagMode.entries.forEach { mode ->
+                        FilterChip(
+                            selected = chatState.ragMode == mode,
+                            onClick = { chatState.ragMode = mode },
+                            label = { Text(mode.label, style = MaterialTheme.typography.labelSmall) }
+                        )
+                    }
+                }
+            }
+        }
+    }
+    if (ChatOption.TEMPERATURE in chatState.visibleOptions) {
+        val tempValue = chatState.temperatureOverride ?: 1.0f
+        Column(modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)) {
+            Text(
+                s.temperatureValue("%.1f".format(tempValue)),
+                style = MaterialTheme.typography.bodyMedium
+            )
+            Slider(
+                value = tempValue,
+                onValueChange = { chatState.temperatureOverride = it },
+                valueRange = 0f..2f,
+                steps = 19
+            )
         }
     }
 }

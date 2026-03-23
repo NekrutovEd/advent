@@ -300,37 +300,45 @@ fun TaskStepperBar(
                                     Text(
                                         text = "${s.taskMemoryGoal}: ${taskMemory.goal}",
                                         style = MaterialTheme.typography.labelSmall,
-                                        color = colorScheme.primary,
-                                        maxLines = 2,
-                                        overflow = TextOverflow.Ellipsis
+                                        color = colorScheme.primary
                                     )
                                 }
                                 if (taskMemory.clarifications.isNotEmpty()) {
-                                    Text(
-                                        text = "${s.taskMemoryClarifications}: ${taskMemory.clarifications.joinToString("; ")}",
-                                        style = MaterialTheme.typography.labelSmall,
-                                        color = colorScheme.onTertiaryContainer,
-                                        maxLines = 3,
-                                        overflow = TextOverflow.Ellipsis
-                                    )
+                                    taskMemory.clarifications.forEach { item ->
+                                        Text(
+                                            text = "  - $item",
+                                            style = MaterialTheme.typography.labelSmall,
+                                            color = colorScheme.onTertiaryContainer
+                                        )
+                                    }
                                 }
                                 if (taskMemory.constraints.isNotEmpty()) {
                                     Text(
-                                        text = "${s.taskMemoryConstraints}: ${taskMemory.constraints.joinToString("; ")}",
+                                        text = s.taskMemoryConstraints + ":",
                                         style = MaterialTheme.typography.labelSmall,
-                                        color = colorScheme.onTertiaryContainer,
-                                        maxLines = 2,
-                                        overflow = TextOverflow.Ellipsis
+                                        color = colorScheme.onTertiaryContainer
                                     )
+                                    taskMemory.constraints.forEach { item ->
+                                        Text(
+                                            text = "  - $item",
+                                            style = MaterialTheme.typography.labelSmall,
+                                            color = colorScheme.onTertiaryContainer
+                                        )
+                                    }
                                 }
                                 if (taskMemory.coveredTopics.isNotEmpty()) {
                                     Text(
-                                        text = "${s.taskMemoryCovered}: ${taskMemory.coveredTopics.joinToString("; ")}",
+                                        text = s.taskMemoryCovered + ":",
                                         style = MaterialTheme.typography.labelSmall,
-                                        color = colorScheme.outline,
-                                        maxLines = 2,
-                                        overflow = TextOverflow.Ellipsis
+                                        color = colorScheme.outline
                                     )
+                                    taskMemory.coveredTopics.forEach { item ->
+                                        Text(
+                                            text = "  - $item",
+                                            style = MaterialTheme.typography.labelSmall,
+                                        color = colorScheme.outline
+                                    )
+                                    }
                                 }
                             }
                         }
