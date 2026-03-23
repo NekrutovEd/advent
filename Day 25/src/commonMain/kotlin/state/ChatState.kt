@@ -614,41 +614,90 @@ class ChatState(
 
         taskMemory.isExtracting = true
         try {
+            // Try LLM extraction first
             val extracted = TaskMemory.extractFromConversation(
                 chatApi, conversational, taskMemory, apiKey, model, temperature,
                 connectTimeoutSec, readTimeoutSec, baseUrl, lang
             )
 
-            if (extracted != null) {
+            val llmWorked = extracted != null && (
+                extracted.goal != null ||
+                extracted.newClarifications.isNotEmpty() ||
+                extracted.newConstraints.isNotEmpty() ||
+                extracted.newCovered.isNotEmpty()
+            )
+
+            if (llmWorked && extracted != null) {
                 if (extracted.goal != null) taskMemory.goal = extracted.goal
                 extracted.newClarifications.forEach { if (it.isNotBlank()) taskMemory.clarifications.add(it) }
                 extracted.newConstraints.forEach { if (it.isNotBlank()) taskMemory.constraints.add(it) }
                 extracted.newCovered.forEach { if (it.isNotBlank()) taskMemory.coveredTopics.add(it) }
-            }
-
-            // Heuristic fallback: if LLM extraction returned nothing useful,
-            // set goal from the last user message (so Task Memory is never empty)
-            if (taskMemory.goal == null) {
-                val lastUser = conversational.lastOrNull { it.role == "user" }
-                if (lastUser != null) {
-                    val msg = lastUser.content.take(120).trim()
-                    taskMemory.goal = msg
-                }
-            }
-            // Heuristic: extract a covered topic from assistant response
-            if (extracted == null || extracted.newCovered.isEmpty()) {
-                val lastAssistant = conversational.lastOrNull { it.role == "assistant" }
-                if (lastAssistant != null) {
-                    val summary = lastAssistant.content.take(80).trim()
-                        .replace(Regex("\\s+"), " ")
-                    if (summary.isNotBlank() && summary !in taskMemory.coveredTopics) {
-                        taskMemory.coveredTopics.add(summary)
-                    }
-                }
+            } else {
+                // ── Heuristic fallback (no LLM needed) ──────────────
+                heuristicUpdateTaskMemory(conversational)
             }
         } finally {
             taskMemory.isExtracting = false
         }
+    }
+
+    /**
+     * Pure heuristic task memory update — no LLM calls.
+     * Always updates goal to latest user question.
+     * Extracts clarifications from user messages (constraints/requirements).
+     * Builds covered topics from Q&A pair summaries.
+     */
+    private fun heuristicUpdateTaskMemory(conversational: List<ChatMessage>) {
+        val lastUser = conversational.lastOrNull { it.role == "user" } ?: return
+        val lastAssistant = conversational.lastOrNull { it.role == "assistant" } ?: return
+
+        // Goal: always track the latest user question
+        taskMemory.goal = lastUser.content.trim().take(200)
+
+        // Clarifications: extract from user message if it contains establishing language
+        val userText = lastUser.content.lowercase()
+        val constraintPatterns = listOf(
+            "должн", "нужно", "обязательно", "только", "без",
+            "must", "need", "require", "only", "without", "should",
+            "не использ", "don't use", "do not use"
+        )
+        val hasConstraint = constraintPatterns.any { userText.contains(it) }
+        if (hasConstraint) {
+            val constraint = lastUser.content.trim().take(150)
+            if (constraint !in taskMemory.constraints) {
+                taskMemory.constraints.add(constraint)
+            }
+        }
+
+        // Clarifications: extract key facts from assistant response (first sentence)
+        val assistantText = lastAssistant.content.trim()
+        val firstSentence = assistantText
+            .split(Regex("[.!?\\n]"))
+            .firstOrNull { it.trim().length > 15 }
+            ?.trim()
+            ?.take(200)
+        if (firstSentence != null && firstSentence !in taskMemory.clarifications) {
+            taskMemory.clarifications.add(firstSentence)
+        }
+
+        // Covered: build a short topic label from user question (not the raw text)
+        val topicLabel = buildTopicLabel(lastUser.content)
+        if (topicLabel.isNotBlank() && topicLabel !in taskMemory.coveredTopics) {
+            taskMemory.coveredTopics.add(topicLabel)
+        }
+    }
+
+    /**
+     * Build a short topic label from a user question.
+     * Strips question words, keeps the subject.
+     */
+    private fun buildTopicLabel(question: String): String {
+        val stripped = question.trim()
+            .replace(Regex("^(расскажи|объясни|как|что|какой|какая|какие|почему|зачем|где|когда|сколько|tell me|explain|how|what|which|why|where|when|describe|show)\\s+", RegexOption.IGNORE_CASE), "")
+            .replace(Regex("^(о |об |про |about |regarding )", RegexOption.IGNORE_CASE), "")
+            .trim()
+            .replaceFirstChar { it.uppercase() }
+        return stripped.take(100)
     }
 
     private fun buildMemoryPreamble(
