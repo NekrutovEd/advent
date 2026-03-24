@@ -29,6 +29,16 @@ class SettingsState {
 
     val apiConfigs = mutableStateListOf(
         ApiConfig(
+            id = "ollama",
+            name = "Ollama (local)",
+            baseUrl = "http://localhost:11434",
+            requiresApiKey = false,
+            defaultReadTimeout = "120",
+            availableModels = listOf(
+                "qwen3:14b"
+            )
+        ),
+        ApiConfig(
             id = "groq",
             name = "Groq",
             baseUrl = "https://api.groq.com/openai",

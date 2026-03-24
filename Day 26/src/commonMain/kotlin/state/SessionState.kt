@@ -125,7 +125,7 @@ class SessionState(
         return chats.mapNotNull { chat ->
             val model = chat.modelOverride ?: globalModel
             val apiConfig = settings.configForModel(model) ?: return@mapNotNull null
-            if (apiConfig.apiKey.isBlank()) return@mapNotNull null
+            if (apiConfig.apiKey.isBlank() && apiConfig.requiresApiKey) return@mapNotNull null
 
             val chatPrompt = applyConstraints(prompt, chat.constraints)
             val combinedSystemPrompt = combineSystemPrompts(globalSystemPrompt, chat.systemPrompt)
@@ -202,7 +202,7 @@ class SessionState(
 
         val model = chat.modelOverride ?: settings.selectedModel
         val apiConfig = settings.configForModel(model) ?: return null
-        if (apiConfig.apiKey.isBlank()) return null
+        if (apiConfig.apiKey.isBlank() && apiConfig.requiresApiKey) return null
 
         val globalSystemPrompt = settings.systemPrompt
         val chatPrompt = applyConstraints(prompt, chat.constraints)

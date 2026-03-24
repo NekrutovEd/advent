@@ -371,7 +371,7 @@ class AppState(
         val allModels = settings.allModels()
         val model = cheapModels.firstOrNull { it in allModels } ?: allModels.firstOrNull() ?: return
         val apiConfig = settings.configForModel(model) ?: return
-        if (apiConfig.apiKey.isBlank()) return
+        if (apiConfig.apiKey.isBlank() && apiConfig.requiresApiKey) return
 
         scope.launch {
             try {

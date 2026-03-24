@@ -11,6 +11,9 @@ data class ModelInfo(
 object ModelInfoProvider {
 
     private val entries = mapOf(
+        // ── Ollama (local) ──────────────────────────────────────────────────
+        "qwen3:14b"                     to ModelInfo( 32_768, "Alibaba",  "14B",  "General",   "Qwen 3 14B — local via Ollama, hybrid thinking"),
+
         // ── Groq ─────────────────────────────────────────────────────────────
         "llama-3.3-70b-versatile"       to ModelInfo(128_000, "Meta",     "70B",  "General",   "Flagship LLaMA 3.3 — best all-round Groq model"),
         "llama-3.1-8b-instant"          to ModelInfo(128_000, "Meta",     "8B",   "Fast",      "Ultra-fast lightweight model for simple tasks"),
